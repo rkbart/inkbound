@@ -549,6 +549,15 @@ body {
   margin-top: 4px;
 }
 
+.history-entry-date {
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  color: rgba(139, 107, 27, 0.5);
+  font-style: italic;
+  margin-top: 4px;
+  text-align: right;
+}
+
 /* ----------------------------------------------------
    LOGIN PAGE
    ---------------------------------------------------- */
