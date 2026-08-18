@@ -82,6 +82,40 @@ For an in-depth explanation of system architecture, data schemas, Web Audio API 
 
 ---
 
+## 🛠️ AI Skills & Development Guidelines
+
+This project has been configured with AI agent skills to enhance code quality and development practices:
+
+### Karpathy Guidelines
+Behavioral guidelines to reduce common LLM coding mistakes, derived from Andrej Karpathy's observations on LLM coding pitfalls. Located at `~/.opencode/skills/andrej-karpathy-skills/`.
+
+Key principles:
+- **Think Before Coding**: State assumptions explicitly, surface tradeoffs
+- **Simplicity First**: Minimum code that solves the problem, nothing speculative
+- **Surgical Changes**: Touch only what you must, clean up only your own mess
+- **Goal-Driven Execution**: Define success criteria, loop until verified
+
+### Design Taste Skills
+Anti-slop frontend design skills for landing pages, portfolios, and redesigns. Located at `.agents/skills/`.
+
+Key skills include:
+- `design-taste-frontend`: Anti-slop frontend skill for landing pages and redesigns
+- `high-end-visual-design`: Premium visual design patterns
+- `minimalist-ui`: Clean, minimal interface design
+- `industrial-brutalist-ui`: Raw, industrial aesthetic patterns
+- `brandkit`: Brand kit image generation skill
+- `image-to-code`: Image-to-code conversion workflows
+- And 7 more specialized design skills
+
+### Usage
+These skills are automatically available to AI coding agents working on this project. They provide guidelines for:
+- Code quality and best practices
+- UI/UX design patterns
+- Anti-slop design techniques
+- Performance and accessibility guardrails
+
+---
+
 ## 📄 License
 
 This project is open-source under the MIT License.

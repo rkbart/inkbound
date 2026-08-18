@@ -169,6 +169,15 @@ The visual theme combines dark academia and magical dark fantasy aesthetics:
   - Corner plate brass brackets (`.corner-plate`).
   - Glassmorphic modal backdrop (`backdrop-filter: blur(8px)`).
 
+#### Design Skill Compliance Notes
+
+Based on the installed design taste skills:
+
+- **Font Choices**: The project uses serif fonts (Cinzel Decorative & IM Fell English) which aligns with the "genuinely editorial / luxury / publication / manuscript / heritage / vintage" aesthetic required for serif usage per the design taste skill guidelines.
+- **Icon Library**: The project uses `lucide-react` which is noted as "Discouraged" in the design taste skill but acceptable when the project already depends on it.
+- **UI Font**: The project uses Inter which is "Discouraged as default" but acceptable when already in use or for neutral/standard feel.
+- **Dark Theme**: The dark fantasy aesthetic is appropriate for the diary application and follows good dark mode practices.
+
 ---
 
 ## 3. Backend Implementation
