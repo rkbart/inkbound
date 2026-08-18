@@ -153,21 +153,39 @@ To eliminate external static audio asset dependencies and guarantee instant load
 
 The visual theme combines dark academia and magical dark fantasy aesthetics:
 
-- **Typography**:
-  - Title Font: `'Cinzel Decorative'`, serif
-  - Body / Parchment Font: `'IM Fell English'`, serif
-  - UI Font: `'Inter'`, sans-serif
+- **Typography** (Self-hosted via `@font-face` with `font-display: swap`):
+  - Title Font: `'Cinzel Decorative'`, serif (Bold weight)
+  - Body / Parchment Font: `'IM Fell English'`, serif (Regular + Italic)
+  - Ink Writing Font: `'Marck Script'`, cursive
+  - UI / Serif Accent: `'Playfair Display'`, serif (Regular + Italic)
+  - Display Font: `'Pirata One'`, serif
+  - Font files located in `/public/fonts/`
 - **Color Palette**:
   - Leather Cover: `linear-gradient(145deg, #1c140d, #0b0704)`
   - Parchment Page: `radial-gradient(circle, #f7f1e3 0%, #e2d4b7 100%)`
   - Gold Foil Accents: `#d4af37`, `#b8860b`
   - Ink Color: `#18100a`
+  - Off-Black Background: `#0a080c` (used consistently, no pure `#000000`)
   - Horcrux Cursed Glow: `rgba(124, 10, 10, 0.6)` with red drop shadows (`#7c0a0a`)
 - **Key Visual Elements**:
   - Drop shadows on page folds (`.spine-fold`).
   - Leather texture overlay (`.leather-texture`).
   - Corner plate brass brackets (`.corner-plate`).
-  - Glassmorphic modal backdrop (`backdrop-filter: blur(8px)`).
+  - Glassmorphic modal backdrop (`backdrop-filter: blur(8px)`) with solid fallback for `prefers-reduced-transparency`.
+
+#### Design Skill Compliance Notes
+
+Based on the installed design taste skills, the following changes were implemented:
+
+- **Self-Hosted Fonts**: Replaced Google Fonts `@import url()` with local `@font-face` declarations using `font-display: swap` for better performance and privacy.
+- **Reduced Motion Support**: Added `@media (prefers-reduced-motion: reduce)` to disable all CSS animations for users who prefer reduced motion.
+- **Viewport Units**: Replaced `vh` with `dvh` (dynamic viewport height) for mobile Safari stability.
+- **Off-Black Colors**: Replaced all pure black (`rgba(0,0,0,...)`) with off-black (`rgba(10,8,12,...)`) matching the `--bg-dark` variable.
+- **Backdrop Blur Fallback**: Added `@media (prefers-reduced-transparency: reduce)` with solid background fallback.
+- **Form Inputs**: Verified labels are positioned above inputs (not placeholder-as-label pattern).
+- **Font Choices**: The project uses serif fonts (Cinzel Decorative & IM Fell English) which aligns with the "genuinely editorial / luxury / publication / manuscript / heritage / vintage" aesthetic required for serif usage per the design taste skill guidelines.
+- **Icon Library**: The project uses `lucide-react` which is noted as "Discouraged" in the design taste skill but acceptable when the project already depends on it.
+- **Dark Theme**: The dark fantasy aesthetic is appropriate for the diary application and follows good dark mode practices.
 
 ---
 
@@ -401,7 +419,15 @@ inkbound/
 ├── data/
 │   ├── db.json           # JSON Database fallback file
 │   └── inkbound.db       # SQLite Database file
-├── public/               # Static public assets
+├── public/
+│   └── fonts/            # Self-hosted web fonts (@font-face)
+│       ├── CinzelDecorative-Bold.ttf
+│       ├── IMFellEnglish-Regular.ttf
+│       ├── IMFellEnglish-Italic.ttf
+│       ├── MarckScript-Regular.ttf
+│       ├── PlayfairDisplay-Regular.ttf
+│       ├── PlayfairDisplay-Italic.ttf
+│       └── PirataOne-Regular.ttf
 ├── server/
 │   ├── db.js             # Dual-tier database storage module
 │   ├── gemini.js         # Gemini AI & offline fallback engine
@@ -409,6 +435,7 @@ inkbound/
 ├── src/
 │   ├── components/
 │   │   ├── BookCover.jsx        # Interactive cover component
+│   │   ├── LoginPage.jsx        # User login/registration
 │   │   ├── MemoryModal.jsx      # Ribbon memory drawer modal
 │   │   ├── ParchmentSpread.jsx  # Two-page parchment spread
 │   │   └── TomRiddleWriter.jsx  # Ink bleed typewriter component
@@ -418,10 +445,12 @@ inkbound/
 │   ├── App.jsx                  # Main React application component
 │   ├── index.css                # Global design system & animations
 │   └── main.jsx                 # React root entrypoint
+├── .agents/skills/       # AI agent design skills (13 skills)
 ├── .env.example          # Environment variables template
 ├── index.html            # Main HTML document
 ├── package.json          # Node.js dependencies & scripts
 ├── README.md             # Overview documentation
+├── DOCUMENTATION.md      # Technical implementation docs
 └── vite.config.js        # Vite configuration
 ```
 

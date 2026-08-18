@@ -21,7 +21,7 @@
 
 ## 🛠️ Tech Stack
 
-- **Frontend**: React 19, Vite, Lucide Icons, Web Audio API, Vanilla CSS (Custom Design System with Google Fonts `Cinzel Decorative` & `IM Fell English`)
+- **Frontend**: React 19, Vite, Lucide Icons, Web Audio API, Vanilla CSS (Custom Design System with self-hosted fonts: `Cinzel Decorative`, `IM Fell English`, `Marck Script`, `Playfair Display`)
 - **Backend**: Node.js, Express 5, CORS, Dotenv
 - **AI Integration**: `@google/genai` (Google Gemini AI SDK - `gemini-2.5-flash`)
 - **Database**: `better-sqlite3` with user-scoped data isolation and automated fallback to JSON file storage
@@ -79,6 +79,40 @@ Open your browser and navigate to `http://localhost:5173`.
 ## 📚 Technical Documentation
 
 For an in-depth explanation of system architecture, data schemas, Web Audio API sound synthesis, Gemini prompt design, and implementation details, please read [DOCUMENTATION.md](file:///home/rkbart/Projects/inkbound/DOCUMENTATION.md).
+
+---
+
+## 🛠️ AI Skills & Development Guidelines
+
+This project has been configured with AI agent skills to enhance code quality and development practices:
+
+### Karpathy Guidelines
+Behavioral guidelines to reduce common LLM coding mistakes, derived from Andrej Karpathy's observations on LLM coding pitfalls. Located at `~/.opencode/skills/andrej-karpathy-skills/`.
+
+Key principles:
+- **Think Before Coding**: State assumptions explicitly, surface tradeoffs
+- **Simplicity First**: Minimum code that solves the problem, nothing speculative
+- **Surgical Changes**: Touch only what you must, clean up only your own mess
+- **Goal-Driven Execution**: Define success criteria, loop until verified
+
+### Design Taste Skills
+Anti-slop frontend design skills for landing pages, portfolios, and redesigns. Located at `.agents/skills/`.
+
+Key skills include:
+- `design-taste-frontend`: Anti-slop frontend skill for landing pages and redesigns
+- `high-end-visual-design`: Premium visual design patterns
+- `minimalist-ui`: Clean, minimal interface design
+- `industrial-brutalist-ui`: Raw, industrial aesthetic patterns
+- `brandkit`: Brand kit image generation skill
+- `image-to-code`: Image-to-code conversion workflows
+- And 7 more specialized design skills
+
+### Usage
+These skills are automatically available to AI coding agents working on this project. They provide guidelines for:
+- Code quality and best practices
+- UI/UX design patterns
+- Anti-slop design techniques
+- Performance and accessibility guardrails
 
 ---
 

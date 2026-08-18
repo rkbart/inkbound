@@ -175,6 +175,11 @@ export default function ParchmentSpread({
                         *Ink absorbed in silence*
                       </div>
                     )}
+                    {entry.created_at && (
+                      <div className="history-entry-date">
+                        {new Date(entry.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
