@@ -80,6 +80,12 @@
   user-select: none;
 }
 
+#root {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
 body {
   background-color: var(--bg-dark);
   color: #e2d8c3;
@@ -105,6 +111,35 @@ body {
   background: var(--gold-accent);
   border-radius: 3px;
 }
+
+/* ----------------------------------------------------
+   SKELETON LOADING ANIMATION
+   ---------------------------------------------------- */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 4px;
+  background: rgba(139, 107, 27, 0.25);
+  animation: skeletonPulse 1.8s ease-in-out infinite;
+  margin-bottom: 10px;
+}
+
+.skeleton-line.short { width: 40%; }
+.skeleton-line.medium { width: 65%; }
+.skeleton-line.long { width: 90%; }
+
+.skeleton-entry {
+  padding: 12px 0;
+  border-bottom: 1px dashed rgba(139, 107, 27, 0.15);
+}
+
+.skeleton-entry .skeleton-line.user { width: 55%; height: 12px; margin-bottom: 8px; }
+.skeleton-entry .skeleton-line.diary { width: 80%; height: 12px; margin-bottom: 6px; }
+.skeleton-entry .skeleton-line.date { width: 30%; height: 10px; margin-bottom: 0; }
 
 /* ----------------------------------------------------
    BOOK COVER CONTAINER & FLIP ANIMATION
