@@ -152,17 +152,7 @@ export default function ParchmentSpread({
 
         {showEntries && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {showSkeleton ? (
-              <div style={{ flex: 1, overflow: 'hidden', padding: '4px 0' }}>
-                {[1, 2, 3].map(i => (
-                  <div key={i} className="skeleton-entry">
-                    <div className="skeleton-line user" />
-                    <div className="skeleton-line diary" />
-                    <div className="skeleton-line date" />
-                  </div>
-                ))}
-              </div>
-            ) : entries.length === 0 ? (
+            {entries.length === 0 && !showSkeleton ? (
               <div style={{ textAlign: 'center', color: '#8c7355', marginTop: '60px', fontStyle: 'italic' }}>
                 <Sparkles size={28} color="#b8860b" style={{ marginBottom: '12px' }} />
                 <p>The pages are blank.</p>
@@ -192,6 +182,13 @@ export default function ParchmentSpread({
                     )}
                   </div>
                 ))}
+                {showSkeleton && (
+                  <div className="skeleton-entry">
+                    <div className="skeleton-line user" />
+                    <div className="skeleton-line diary" />
+                    <div className="skeleton-line date" />
+                  </div>
+                )}
               </div>
             )}
             {totalPages > 1 && (
