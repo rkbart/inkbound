@@ -310,8 +310,8 @@ body {
   justify-content: space-between;
   align-items: center;
   border-bottom: 2px dashed rgba(139, 107, 27, 0.3);
-  padding-bottom: 12px;
-  margin-bottom: 20px;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
 }
 
 .date-stamp {
@@ -469,7 +469,7 @@ body {
   display: flex;
   gap: 12px;
   align-items: center;
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 .btn-quill {

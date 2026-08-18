@@ -195,7 +195,7 @@ export default function ParchmentSpread({
               </div>
             )}
             {totalPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', paddingTop: '4px', borderTop: '1px dashed rgba(139,107,27,0.2)' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', paddingTop: '4px', borderTop: '1px dashed rgba(139,107,27,0.3)' }}>
                 {currentPage > 0 ? (
                   <button className="btn-icon" onClick={goPrevPage} title="Previous page">
                     <ChevronLeft size={16} />
@@ -217,7 +217,7 @@ export default function ParchmentSpread({
 
       <div className="page-right">
         <div className="page-header">
-          <span className="date-stamp" style={{ fontSize: '0.95rem' }}>{currentDateStr}</span>
+          <span className="date-stamp">{currentDateStr}</span>
         </div>
 
         {viewState === 'write' || viewState === 'sinking' ? (
@@ -234,7 +234,7 @@ export default function ParchmentSpread({
               autoFocus
             />
 
-            <div className="action-toolbar" style={{ justifyContent: 'center', borderTop: '1px dashed rgba(139,107,27,0.3)', paddingTop: '10px' }}>
+            <div className="action-toolbar" style={{ justifyContent: 'center', borderTop: '1px dashed rgba(139,107,27,0.3)', paddingTop: '6px' }}>
               <span style={{ fontSize: '0.8rem', color: '#8c7355', fontStyle: 'italic' }}>
                 Double tap to let paper absorb your words
               </span>
@@ -276,7 +276,7 @@ export default function ParchmentSpread({
               })()}
             </div>
 
-            <div className="action-toolbar" style={{ justifyContent: 'center', borderTop: '1px dashed rgba(139,107,27,0.3)', paddingTop: '10px' }}>
+            <div className="action-toolbar" style={{ justifyContent: 'center', borderTop: '1px dashed rgba(139,107,27,0.3)', paddingTop: '6px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <span style={{ fontSize: '0.8rem', color: '#8c7355', fontStyle: 'italic' }}>
                   {responseViewIndex >= 0 ? `Entry ${responseViewIndex + 1} of ${entries.length}` : 'Double tap to write next entry'}
