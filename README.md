@@ -22,7 +22,7 @@
 ## Tech Stack
 
 - **Frontend**: React 19, Vite, Lucide Icons, Web Audio API, Vanilla CSS (Custom Design System with self-hosted fonts: `Cinzel Decorative`, `IM Fell English`, `Marck Script`, `Playfair Display`)
-- **Backend**: Vercel Serverless Functions (Node.js)
+- **Backend**: Vercel Serverless Functions (Node.js) + local dev server (`server-dev.js`)
 - **Database**: Turso (hosted SQLite via HTTP) with `@tursodatabase/serverless`
 - **Response System**: Branching conversation trees with ~250 curated responses in 1940s British style
 
@@ -62,7 +62,20 @@ export TURSO_AUTH_TOKEN="..."
 node scripts/setup-db.js
 ```
 
-### 4. Vercel Deployment (Recommended)
+### 4. Local Development
+Create a `.env` file in the project root with your Turso credentials:
+```env
+TURSO_DATABASE_URL=libsql://your-db.turso.io
+TURSO_AUTH_TOKEN=your-token-here
+```
+
+Then start the dev server (runs both API server and Vite):
+```bash
+npm run dev
+```
+Open your browser to `http://localhost:5173`. The local API server runs on port 3001 and Vite proxies `/api/*` requests to it.
+
+### 5. Vercel Deployment
 ```bash
 # Install Vercel CLI
 npm i -g vercel
@@ -72,14 +85,8 @@ vercel env add TURSO_DATABASE_URL
 vercel env add TURSO_AUTH_TOKEN
 
 # Deploy
-vercel
+vercel --prod
 ```
-
-### 5. Local Development
-```bash
-npm run dev
-```
-Open your browser and navigate to `http://localhost:5173`.
 
 ---
 
@@ -87,7 +94,7 @@ Open your browser and navigate to `http://localhost:5173`.
 
 | Command | Description |
 | :--- | :--- |
-| `npm run dev` | Starts Vite frontend dev server. |
+| `npm run dev` | Starts local API server (port 3001) and Vite dev server (port 5173) concurrently. |
 | `npm run build` | Bundles the React frontend for production distribution into `/dist`. |
 | `npm run lint` | Runs `oxlint` to perform code linting and syntax checks. |
 | `npm run preview` | Previews the production build locally. |
@@ -101,20 +108,20 @@ The diary uses a branching conversation tree system with 12 detected themes:
 
 | Theme | Detection | Memory Extracted |
 |---|---|---|
-| `name_intro` | "my name is", "i am", "call me" | User's name |
-| `identity_question` | "who are you", "what is this" | None |
-| `fear` | "afraid", "scared", "terrified" | Fear description |
-| `love` | "love", "adore", "passion" | Love interest |
-| `secret` | "secret", "confession", "don't tell" | Secret text |
-| `anger` | "angry", "furious", "rage" | Anger source |
-| `sadness` | "sad", "lonely", "grief" | Sadness cause |
-| `hope` | "hope", "dream", "wish" | Dream/goal |
-| `magic` | "magic", "enchanted", "supernatural" | Magic interest |
-| `daily_life` | "today", "work", "morning" | Daily context |
-| `relationship` | "friend", "family", "mother" | Person mentioned |
+| `name_intro` | Regex: "my name is X", "I am X", "call me X", "I'm X" | User's name (capitalized) |
+| `identity_question` | "who are you", "what is your name", "do you have a name", "tell me about yourself" | None |
+| `fear` | "afraid", "scared", "terrified", "dread", "nightmare" | Fear description |
+| `love` | "love", "adore", "passion", "beloved" | Love interest |
+| `secret` | "secret", "confession", "don't tell", "hidden" | Secret text |
+| `anger` | "angry", "furious", "hate", "rage", "bitter" | Anger source |
+| `sadness` | "sad", "lonely", "grief", "sorrow", "weep" | Sadness cause |
+| `hope` | "hope", "dream", "wish", "aspire", "someday" | Dream/goal |
+| `magic` | "magic", "enchanted", "supernatural", "spell", "curse" | Magic interest |
+| `daily_life` | "today", "work", "morning", "routine", "commute" | Daily context |
+| `relationship` | "friend", "family", "mother", "colleague" | Person mentioned |
 | `generic` | anything else | None |
 
-Each theme has 3 tiers of responses that progress as the conversation deepens.
+Each theme has 3 tiers of responses that deepen as the conversation progresses. Tier 1 is for first encounters, tier 2 after a few messages, tier 3 for deep familiarity.
 
 ---
 

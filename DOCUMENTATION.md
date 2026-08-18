@@ -15,6 +15,7 @@ This document provides a comprehensive technical breakdown of how **Inkbound** w
    - [Design System & CSS Styling](#design-system--css-styling)
 3. [Backend Implementation](#3-backend-implementation)
    - [Vercel Serverless Functions](#vercel-serverless-functions)
+   - [Local Development Server](#local-development-server)
    - [Branching Conversation Trees](#branching-conversation-trees)
    - [Theme Detection System](#theme-detection-system)
    - [Turso Database Layer](#turso-database-layer)
@@ -34,7 +35,7 @@ sequenceDiagram
     actor User as User
     participant App as React Frontend (Vite)
     participant Audio as Web Audio Synthesizer
-    participant API as Vercel Serverless Functions
+    participant API as Vercel Serverless / Local API
     participant Themes as Theme Detector
     participant Diary as Conversation Tree Engine
     participant DB as Turso (SQLite over HTTP)
@@ -66,7 +67,7 @@ The frontend is implemented using **React 19** and **Vite**, structured into mod
 
 - **App.jsx**: Root component managing top-level state: book open/closed state, entries log, memories bank, modal visibility, and backend fetch/sync lifecycle handlers.
 - **BookCover.jsx**: Renders the closed leather-bound book cover featuring embossed typography, gold corner plates, center glowing crest, and interactive unlatching book clasp button.
-- **ParchmentSpread.jsx**: The main interactive two-page spread with left page (memory ledger) and right page (writing/response view).
+- **ParchmentSpread.jsx**: The main interactive two-page spread with left page (memory ledger with pagination) and right page (writing/response view).
 - **TomRiddleWriter.jsx**: Typewriter component that renders text character-by-character with staggered CSS ink bleed animations.
 - **MemoryModal.jsx**: Overlay modal visualizing the extracted user memory bank.
 - **LoginPage.jsx**: User login/registration page.
@@ -96,7 +97,7 @@ When the user enters text on the parchment and triggers "Sink Ink into Paper":
 
 ### Vercel Serverless Functions
 
-The backend runs as Vercel serverless functions under the `api/` directory:
+The production backend runs as Vercel serverless functions under the `api/` directory:
 
 ```
 api/
@@ -113,59 +114,116 @@ api/
 └── reset.js               # POST /api/reset
 ```
 
+### Local Development Server
+
+For local development, `server-dev.js` provides the same API handlers without deploying to Vercel:
+
+```
+npm run dev
+```
+
+This starts two processes via `concurrently`:
+1. **Local API server** (`server-dev.js` on port 3001) — imports the same `api/_lib/` handlers
+2. **Vite dev server** (port 5173) — proxies `/api/*` requests to port 3001
+
+The Vite proxy is configured in `vite.config.js`:
+```javascript
+server: {
+  proxy: {
+    '/api': {
+      target: 'http://localhost:3001',
+      changeOrigin: true,
+    }
+  }
+}
+```
+
+A `.env` file in the project root provides Turso credentials for local development (gitignored).
+
 ### Branching Conversation Trees
 
 Instead of an AI API, Inkbound uses pre-written response trees. Each response is curated in a formal 1940s British style.
 
 **Response Flow:**
 1. User writes on parchment
-2. Theme detector scans input for keywords
-3. Branch selector determines response tier (1st, 2nd, 3rd+ time)
-4. Response picker selects from curated pool and personalizes with memories
+2. Theme detector scans input for keywords/patterns
+3. History is fetched BEFORE adding the current message (so tier 1 works for first messages)
+4. Branch selector determines response tier (1st, 2nd, 3rd+ time)
+5. Response picker selects from curated pool and personalizes with `{name}` and `{personaName}` placeholders
 
 ### Theme Detection System
 
-12 themes are detected via keyword matching:
+12 themes are detected. Name introduction uses regex patterns (not keywords) to avoid false positives like "I am afraid" triggering name_intro.
 
-| Theme | Keywords | Memory Extracted |
+**Name Detection (regex-based):**
+```javascript
+const namePatterns = [
+  /my name is\s+[a-z]/i,
+  /\bi am\s+[a-z]/i,
+  /\bcall me\s+[a-z]/i,
+  /\bi'm\s+[a-z]/i,
+  /\bi am called\s+[a-z]/i,
+  /\bthey call me\s+[a-z]/i
+];
+```
+
+A common words filter prevents false extractions (e.g., "I am afraid" does not extract "afraid" as a name).
+
+**Theme Table:**
+
+| Theme | Detection | Memory Extracted |
 |---|---|---|
-| `name_intro` | "my name is", "i am", "call me" | User's name |
-| `identity_question` | "who are you", "what is this" | None |
-| `fear` | "afraid", "scared", "terrified" | Fear description |
-| `love` | "love", "adore", "passion" | Love interest |
-| `secret` | "secret", "confession" | Secret text |
-| `anger` | "angry", "furious", "rage" | Anger source |
-| `sadness` | "sad", "lonely", "grief" | Sadness cause |
-| `hope` | "hope", "dream", "wish" | Dream/goal |
-| `magic` | "magic", "enchanted" | Magic interest |
-| `daily_life` | "today", "work", "morning" | Daily context |
-| `relationship` | "friend", "family" | Person mentioned |
+| `name_intro` | Regex patterns (see above) | User's name (capitalized) |
+| `identity_question` | "who are you", "what is your name", "do you have a name", "tell me about yourself", "introduce yourself" | None |
+| `fear` | "afraid", "scared", "terrified", "dread", "nightmare" | Fear description |
+| `love` | "love", "adore", "passion", "beloved" | Love interest |
+| `secret` | "secret", "confession", "don't tell", "hidden" | Secret text |
+| `anger` | "angry", "furious", "hate", "rage", "bitter" | Anger source |
+| `sadness` | "sad", "lonely", "grief", "sorrow", "weep" | Sadness cause |
+| `hope` | "hope", "dream", "wish", "aspire", "someday" | Dream/goal |
+| `magic` | "magic", "enchanted", "supernatural", "spell", "curse" | Magic interest |
+| `daily_life` | "today", "work", "morning", "routine", "commute" | Daily context |
+| `relationship` | "friend", "family", "mother", "colleague" | Person mentioned |
 | `generic` | anything else | None |
 
 ### Turso Database Layer
 
-Replaces the previous SQLite/JSON dual-tier system with Turso (hosted SQLite over HTTP):
+Uses `@tursodatabase/serverless` with lazy connection initialization:
 
 ```javascript
 import { connect } from "@tursodatabase/serverless";
 
-const conn = connect({
-  url: process.env.TURSO_DATABASE_URL,
-  authToken: process.env.TURSO_AUTH_TOKEN,
-});
-
-// All database operations are now async
-await conn.execute({
-  sql: 'SELECT * FROM entries WHERE username = ?',
-  args: [username]
-});
+let conn;
+function getConn() {
+  if (!conn) {
+    conn = connect({
+      url: process.env.TURSO_DATABASE_URL,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    });
+  }
+  return conn;
+}
 ```
 
-**Key changes from previous implementation:**
-- Removed `better-sqlite3` (native binary)
-- Removed JSON file fallback
-- All operations are now async
-- Database persists across serverless invocations
+**Key API pattern** — args go as the second argument to `session.execute()`:
+```javascript
+const result = await getConn().session.execute(
+  'SELECT * FROM entries WHERE username = ?',
+  [username]
+);
+```
+
+**Row format** — Turso returns rows as arrays. A `toObjects()` helper converts them to named objects:
+```javascript
+function toObjects(result) {
+  const cols = result.columns;
+  return result.rows.map(row => {
+    const obj = {};
+    cols.forEach((col, i) => { obj[col] = row[i]; });
+    return obj;
+  });
+}
+```
 
 ---
 
@@ -186,7 +244,7 @@ await conn.execute({
 ```json
 {
   "should_reply": true,
-  "response_text": "Hello, {name}. I am {personaName}...",
+  "response_text": "I am Tom Riddle. I listen. I remember. I write back.",
   "extracted_memories": [
     {
       "category": "Identity",
@@ -209,7 +267,7 @@ await conn.execute({
     "content": "I had a dark dream last night",
     "response": "Tell me more about this dream...",
     "mood": "neutral",
-    "created_at": "2026-08-18T12:00:00.000Z"
+    "created_at": "2026-08-18 12:00:00"
   }
 ]
 ```
@@ -226,7 +284,7 @@ await conn.execute({
     "key": "User Name",
     "value": "Alice",
     "importance": 5,
-    "last_seen": "2026-08-18T12:00:00.000Z"
+    "last_seen": "2026-08-18 12:00:00"
   }
 ]
 ```
@@ -305,12 +363,12 @@ CREATE TABLE IF NOT EXISTS conversation (
 inkbound/
 ├── api/                          # Vercel serverless functions
 │   ├── _lib/                     # Shared utilities
-│   │   ├── db.js                 # Turso client
+│   │   ├── db.js                 # Turso client (lazy connection)
 │   │   ├── diary.js              # Main interaction logic
-│   │   ├── themes.js             # Theme detection
-│   │   ├── responses.js          # Curated responses
-│   │   ├── brancher.js           # Branch selection
-│   │   └── picker.js             # Response picking
+│   │   ├── themes.js             # Theme detection (regex + keywords)
+│   │   ├── responses.js          # ~250 curated responses
+│   │   ├── brancher.js           # Branch/tier selection
+│   │   └── picker.js             # Response picking + personalization
 │   ├── interact.js               # POST /api/interact
 │   ├── entries.js                # GET /api/entries
 │   ├── memories.js               # GET /api/memories
@@ -319,11 +377,17 @@ inkbound/
 │   └── fonts/                    # Self-hosted web fonts
 ├── scripts/
 │   └── setup-db.js               # Turso schema initialization
-├── src/                          # React frontend (unchanged)
+├── src/                          # React frontend
+│   ├── App.jsx                   # Root component (API_BASE = '/api')
+│   ├── components/               # UI components
+│   └── utils/audio.js            # Web Audio synthesizer
+├── server-dev.js                 # Local API dev server (port 3001)
 ├── schema.sql                    # Database schema
 ├── vercel.json                   # Vercel configuration
+├── .env                          # Local Turso credentials (gitignored)
+├── .env.example                  # Example env file
 ├── package.json                  # Dependencies
-└── vite.config.js                # Vite configuration
+└── vite.config.js                # Vite config with API proxy
 ```
 
 ### Environment Variables
@@ -337,7 +401,7 @@ TURSO_AUTH_TOKEN=your-token-here
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Starts Vite frontend dev server |
+| `npm run dev` | Starts local API server (port 3001) + Vite (port 5173) concurrently |
 | `npm run build` | Bundles frontend for production |
 | `npm run lint` | Runs oxlint for code quality |
 | `node scripts/setup-db.js` | Initializes Turso schema |
