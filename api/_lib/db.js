@@ -11,6 +11,10 @@ function getConn() {
   return conn;
 }
 
+function resetConn() {
+  conn = null;
+}
+
 function toObjects(result) {
   const cols = result.columns;
   return result.rows.map(row => {
@@ -20,9 +24,18 @@ function toObjects(result) {
   });
 }
 
+async function execute(sql, args) {
+  try {
+    return await getConn().session.execute(sql, args);
+  } catch (err) {
+    resetConn();
+    return await getConn().session.execute(sql, args);
+  }
+}
+
 export const dbService = {
   async addEntry(content, response, username, mood = 'neutral') {
-    const result = await getConn().session.execute(
+    const result = await execute(
       'INSERT INTO entries (username, content, response, mood) VALUES (?, ?, ?, ?)',
       [username, content, response || null, mood]
     );
@@ -30,7 +43,7 @@ export const dbService = {
   },
 
   async getEntries(username) {
-    const result = await getConn().session.execute(
+    const result = await execute(
       'SELECT * FROM entries WHERE username = ? ORDER BY created_at ASC',
       [username]
     );
@@ -38,18 +51,18 @@ export const dbService = {
   },
 
   async upsertMemory(category, key, value, username, importance = 3) {
-    const existing = await getConn().session.execute(
+    const existing = await execute(
       'SELECT id FROM memories WHERE username = ? AND key = ?',
       [username, key]
     );
 
     if (existing.rows.length > 0) {
-      await getConn().session.execute(
+      await execute(
         'UPDATE memories SET value = ?, category = ?, importance = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?',
         [value, category, importance, existing.rows[0][0]]
       );
     } else {
-      await getConn().session.execute(
+      await execute(
         'INSERT INTO memories (username, category, key, value, importance) VALUES (?, ?, ?, ?, ?)',
         [username, category, key, value, importance]
       );
@@ -57,7 +70,7 @@ export const dbService = {
   },
 
   async getMemories(username) {
-    const result = await getConn().session.execute(
+    const result = await execute(
       'SELECT * FROM memories WHERE username = ? ORDER BY importance DESC, last_seen DESC',
       [username]
     );
@@ -65,14 +78,14 @@ export const dbService = {
   },
 
   async addMessage(role, content, username) {
-    await getConn().session.execute(
+    await execute(
       'INSERT INTO conversation (username, role, content) VALUES (?, ?, ?)',
       [username, role, content]
     );
   },
 
   async getRecentHistory(username, limit = 10) {
-    const result = await getConn().session.execute(
+    const result = await execute(
       'SELECT role, content FROM conversation WHERE username = ? ORDER BY id DESC LIMIT ?',
       [username, limit]
     );
@@ -80,25 +93,25 @@ export const dbService = {
   },
 
   async clearUserData(username) {
-    await getConn().session.execute(
+    await execute(
       'DELETE FROM entries WHERE username = ?',
       [username]
     );
-    await getConn().session.execute(
+    await execute(
       "DELETE FROM memories WHERE username = ? AND category NOT IN ('Persona', 'Origin')",
       [username]
     );
-    await getConn().session.execute(
+    await execute(
       'DELETE FROM conversation WHERE username = ?',
       [username]
     );
   },
 
   async clearAllData() {
-    await getConn().session.execute('DELETE FROM entries');
-    await getConn().session.execute('DELETE FROM memories');
-    await getConn().session.execute('DELETE FROM conversation');
-    await getConn().session.execute(
+    await execute('DELETE FROM entries');
+    await execute('DELETE FROM memories');
+    await execute('DELETE FROM conversation');
+    await execute(
       "INSERT INTO memories (username, category, key, value, importance) VALUES ('anonymous', 'Persona', 'Owner', 'Enchanted Diary Memory', 5)"
     );
   }

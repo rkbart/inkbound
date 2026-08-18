@@ -1,6 +1,6 @@
 import { dbService } from './db.js';
 
-const NEMOTRON_MODEL = 'meta/llama-3.1-70b-instruct';
+const NEMOTRON_MODEL = 'meta/llama-3.1-8b-instruct';
 const NEMOTRON_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
 const SYSTEM_PROMPT = `
@@ -46,19 +46,16 @@ export async function interactWithNemotron(userMessage, personaName = 'Tom Riddl
   const apiKey = process.env.NVIDIA_API_KEY;
   if (!apiKey) return null;
 
-  await dbService.addMessage('user', userMessage, username);
+  const [memories, history] = await Promise.all([
+    dbService.getMemories(username),
+    dbService.getRecentHistory(username, 8)
+  ]);
 
-  const memories = await dbService.getMemories(username);
-  const history = await dbService.getRecentHistory(username, 8);
-
-  const userNameMem = memories.find(m => m.key === 'User Name');
-  if (!userNameMem && username !== 'anonymous') {
+  if (username !== 'anonymous' && !memories.find(m => m.key === 'User Name')) {
     await dbService.upsertMemory('Identity', 'User Name', username, username, 5);
   }
 
-  const freshMemories = await dbService.getMemories(username);
-
-  const memoryContextStr = freshMemories
+  const memoryContextStr = memories
     .map(m => `\u2022 [${m.category}] ${m.key}: ${m.value}`)
     .join('\n');
 
@@ -75,6 +72,7 @@ export async function interactWithNemotron(userMessage, personaName = 'Tom Riddl
   ];
 
   try {
+    console.log('nemotron: calling API with model', NEMOTRON_MODEL);
     const res = await fetch(NEMOTRON_URL, {
       method: 'POST',
       headers: {
@@ -92,12 +90,14 @@ export async function interactWithNemotron(userMessage, personaName = 'Tom Riddl
 
     if (!res.ok) {
       const errText = await res.text();
-      console.error('Nemotron API error:', res.status, errText);
+      console.error('Nemotron API error:', res.status, errText.slice(0, 200));
       return null;
     }
 
     const data = await res.json();
     const rawText = data.choices?.[0]?.message?.content;
+    console.log('nemotron: got response, length:', rawText?.length);
+    console.log('nemotron: raw:', rawText?.slice(0, 300));
     if (!rawText) return null;
 
     let parsed;
@@ -122,12 +122,13 @@ export async function interactWithNemotron(userMessage, personaName = 'Tom Riddl
       }
     }
 
+    console.log('nemotron: parsed:', { shouldReply: parsed?.should_reply, hasResponse: !!parsed?.response_text, responseLen: parsed?.response_text?.length });
+
     if (parsed.extracted_memories && Array.isArray(parsed.extracted_memories)) {
-      for (const mem of parsed.extracted_memories) {
-        if (mem.key && mem.value) {
-          await dbService.upsertMemory(mem.category || 'Fact', mem.key, mem.value, username, mem.importance || 3);
-        }
-      }
+      const memPromises = parsed.extracted_memories
+        .filter(m => m.key && m.value)
+        .map(m => dbService.upsertMemory(m.category || 'Fact', m.key, m.value, username, m.importance || 3));
+      await Promise.allSettled(memPromises);
     }
 
     if (parsed.response_text) {
@@ -143,11 +144,18 @@ export async function interactWithNemotron(userMessage, personaName = 'Tom Riddl
       parsed.should_reply = !!parsed.response_text;
     }
 
-    if (parsed.should_reply && parsed.response_text) {
-      await dbService.addMessage('assistant', parsed.response_text, username);
-      await dbService.addEntry(userMessage, parsed.response_text, username);
-    } else {
-      await dbService.addEntry(userMessage, null, username);
+    try {
+      if (parsed.should_reply && parsed.response_text) {
+        await Promise.all([
+          dbService.addMessage('user', userMessage, username),
+          dbService.addMessage('assistant', parsed.response_text, username),
+          dbService.addEntry(userMessage, parsed.response_text, username)
+        ]);
+      } else {
+        await dbService.addEntry(userMessage, null, username);
+      }
+    } catch (dbErr) {
+      console.error('nemotron: DB write failed:', dbErr.message);
     }
 
     return parsed;
