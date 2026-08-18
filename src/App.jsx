@@ -5,7 +5,7 @@ import LoginPage from './components/LoginPage';
 import MemoryModal from './components/MemoryModal';
 import { diaryAudio } from './utils/audio';
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = '/api';
 
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
