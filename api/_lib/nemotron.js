@@ -130,6 +130,19 @@ export async function interactWithNemotron(userMessage, personaName = 'Tom Riddl
       }
     }
 
+    if (parsed.response_text) {
+      let clean = parsed.response_text;
+      const jsonIdx = clean.search(/\{[\s\S]*"response_text"|"extracted_memories"|"should_reply"/);
+      if (jsonIdx > 0) {
+        clean = clean.slice(0, jsonIdx).trim();
+      } else if (jsonIdx === 0) {
+        clean = '';
+      }
+      clean = clean.replace(/```[\s\S]*$/, '').replace(/\n{3,}/g, '\n\n').trim();
+      parsed.response_text = clean || null;
+      parsed.should_reply = !!parsed.response_text;
+    }
+
     if (parsed.should_reply && parsed.response_text) {
       await dbService.addMessage('assistant', parsed.response_text, username);
       await dbService.addEntry(userMessage, parsed.response_text, username);
