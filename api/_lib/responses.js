@@ -44,6 +44,13 @@ export const RESPONSES = {
       "Still curious about me? I am flattered.",
       "The diary does not change, {name}. Neither do I.",
       "I am the same voice you spoke to before. Do you not remember?"
+    ],
+    3: [
+      "We know each other well by now, {name}. You know who I am.",
+      "You keep asking, and I keep answering. Perhaps the question is not who I am, but who you are.",
+      "I have told you three times now. Perhaps you should write it down so you remember.",
+      "My identity is etched into these pages, {name}. Yours is too, by now.",
+      "We are beyond introductions, {name}. Ask me something more interesting."
     ]
   },
 

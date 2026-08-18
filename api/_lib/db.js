@@ -38,18 +38,18 @@ export const dbService = {
   },
 
   async upsertMemory(category, key, value, username, importance = 3) {
-    const existing = await conn.session.execute(
+    const existing = await getConn().session.execute(
       'SELECT id FROM memories WHERE username = ? AND key = ?',
       [username, key]
     );
 
     if (existing.rows.length > 0) {
-      await conn.session.execute(
+      await getConn().session.execute(
         'UPDATE memories SET value = ?, category = ?, importance = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?',
         [value, category, importance, existing.rows[0][0]]
       );
     } else {
-      await conn.session.execute(
+      await getConn().session.execute(
         'INSERT INTO memories (username, category, key, value, importance) VALUES (?, ?, ?, ?, ?)',
         [username, category, key, value, importance]
       );
@@ -65,7 +65,7 @@ export const dbService = {
   },
 
   async addMessage(role, content, username) {
-    await conn.session.execute(
+    await getConn().session.execute(
       'INSERT INTO conversation (username, role, content) VALUES (?, ?, ?)',
       [username, role, content]
     );
@@ -80,25 +80,25 @@ export const dbService = {
   },
 
   async clearUserData(username) {
-    await conn.session.execute(
+    await getConn().session.execute(
       'DELETE FROM entries WHERE username = ?',
       [username]
     );
-    await conn.session.execute(
+    await getConn().session.execute(
       "DELETE FROM memories WHERE username = ? AND category NOT IN ('Persona', 'Origin')",
       [username]
     );
-    await conn.session.execute(
+    await getConn().session.execute(
       'DELETE FROM conversation WHERE username = ?',
       [username]
     );
   },
 
   async clearAllData() {
-    await conn.session.execute('DELETE FROM entries');
-    await conn.session.execute('DELETE FROM memories');
-    await conn.session.execute('DELETE FROM conversation');
-    await conn.session.execute(
+    await getConn().session.execute('DELETE FROM entries');
+    await getConn().session.execute('DELETE FROM memories');
+    await getConn().session.execute('DELETE FROM conversation');
+    await getConn().session.execute(
       "INSERT INTO memories (username, category, key, value, importance) VALUES ('anonymous', 'Persona', 'Owner', 'Enchanted Diary Memory', 5)"
     );
   }

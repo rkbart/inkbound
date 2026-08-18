@@ -8,14 +8,15 @@
 
 ## Features
 
-- **Interactive Antique Journal**: Realistically styled leather-bound diary with gold-embossed lettering, brass corner plates, spine shadows, and a ribbon bookmark.
-- **Toggle Memory Visibility**: Eye icon button to hide or show the parchment memory ledger. Entries auto-scroll to the bottom when new ones appear.
+- **Interactive Antique Journal**: Realistically styled leather-bound diary with gold-embossed lettering, brass corner plates, spine shadows, and interactive book clasp.
+- **Toggle Memory Visibility**: Eye icon button to hide or show the parchment memory ledger with paginated entry history.
 - **Magic Ink Dissolve & Bleed Animation**: User input smoothly fades into parchment fibers before the diary's handwriting resurfaces character-by-character.
 - **Branching Conversation Trees**: The diary detects themes (fear, love, secrets, anger, hope, etc.) and responds with curated responses that evolve over time. Responses reference previously extracted memories and create a sense of continuity.
 - **Memory Extraction & Personalization**: Automatically detects the user's name, secrets, fears, desires, and relationships. Weaves them into future responses for a personalized experience.
 - **Procedural Web Audio Synthesizer**: Zero-asset audio engine using the Web Audio API to generate realistic pen scratches, paper flip rustles, magic ink dissolve shimmers, and deep ambient atmospheric drones.
-- **Horcrux Cursed Mode & Ribbon Drawer**: Toggle dark cursed visual effects, inspect absorbed memories in the Ribbon Drawer, or perform the "Obliviate" memory wipe.
-- **Zero External Dependencies**: No API keys required. The diary works fully offline with pre-written response trees.
+- **User Authentication**: Username/password login with per-user data isolation and session persistence.
+- **Settings Panel**: Edit persona name, clear diary memory, or log out.
+- **Offline Fallback**: When the API is unreachable, operates locally with a fallback response system.
 
 ---
 
@@ -114,7 +115,7 @@ The diary uses a branching conversation tree system with 12 detected themes:
 | `love` | "love", "adore", "passion", "beloved" | Love interest |
 | `secret` | "secret", "confession", "don't tell", "hidden" | Secret text |
 | `anger` | "angry", "furious", "hate", "rage", "bitter" | Anger source |
-| `sadness` | "sad", "lonely", "grief", "sorrow", "weep" | Sadness cause |
+| `sadness` | "sad", "lonely", "grief", "sorrow", "hopeless", "depressed" | Sadness cause |
 | `hope` | "hope", "dream", "wish", "aspire", "someday" | Dream/goal |
 | `magic` | "magic", "enchanted", "supernatural", "spell", "curse" | Magic interest |
 | `daily_life` | "today", "work", "morning", "routine", "commute" | Daily context |
@@ -128,18 +129,6 @@ Each theme has 3 tiers of responses that deepen as the conversation progresses. 
 ## Technical Documentation
 
 For an in-depth explanation of system architecture, data schemas, Web Audio API sound synthesis, and implementation details, please read [DOCUMENTATION.md](DOCUMENTATION.md).
-
----
-
-## AI Skills & Development Guidelines
-
-This project has been configured with AI agent skills to enhance code quality and development practices:
-
-### Karpathy Guidelines
-Behavioral guidelines to reduce common LLM coding mistakes, derived from Andrej Karpathy's observations on LLM coding pitfalls.
-
-### Design Taste Skills
-Anti-slop frontend design skills for landing pages, portfolios, and redesigns. 13 skills installed covering design patterns, anti-slop techniques, and performance guardrails.
 
 ---
 
