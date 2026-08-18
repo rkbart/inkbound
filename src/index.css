@@ -1,4 +1,58 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700&family=IM+Fell+English:ital@0;1&family=Marck+Script&family=Playfair+Display:ital,wght@0,400..700;1,400..700&family=Pirata+One&display=swap');
+@font-face {
+  font-family: 'Cinzel Decorative';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/fonts/CinzelDecorative-Bold.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'IM Fell English';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/IMFellEnglish-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'IM Fell English';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/IMFellEnglish-Italic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Marck Script';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/MarckScript-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/PlayfairDisplay-Regular.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Playfair Display';
+  font-style: italic;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/PlayfairDisplay-Italic.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: 'Pirata One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/PirataOne-Regular.ttf') format('truetype');
+}
 
 :root {
   --bg-dark: #0a080c;
@@ -60,7 +114,7 @@ body {
   perspective: 2000px;
   width: 95vw;
   max-width: 1050px;
-  height: 85vh;
+  height: 85dvh;
   max-height: 720px;
   position: relative;
   display: flex;
@@ -84,8 +138,8 @@ body {
   border-radius: 12px;
   border: 4px solid #3d2b1f;
   box-shadow: 
-    0 25px 50px -12px rgba(0, 0, 0, 0.9),
-    inset 0 0 30px rgba(0, 0, 0, 0.8),
+    0 25px 50px -12px rgba(10, 8, 12, 0.9),
+    inset 0 0 30px rgba(10, 8, 12, 0.8),
     0 0 15px rgba(212, 175, 55, 0.15);
   display: flex;
   flex-direction: column;
@@ -100,7 +154,7 @@ body {
 .book-cover-closed:hover {
   transform: translateY(-4px) scale(1.01);
   box-shadow: 
-    0 30px 60px -12px rgba(0, 0, 0, 0.95),
+    0 30px 60px -12px rgba(10, 8, 12, 0.95),
     0 0 25px rgba(212, 175, 55, 0.3);
 }
 
@@ -135,7 +189,7 @@ body {
   letter-spacing: 4px;
   color: var(--gold-glow);
   text-shadow: 
-    0 2px 4px rgba(0, 0, 0, 0.9),
+    0 2px 4px rgba(10, 8, 12, 0.9),
     0 0 10px rgba(212, 175, 55, 0.4);
   text-align: center;
   margin-top: 80px;
@@ -156,7 +210,7 @@ body {
   height: 60px;
   background: linear-gradient(180deg, #d4af37 0%, #8b6b1b 100%);
   border-radius: 4px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 4px 10px rgba(10, 8, 12, 0.7);
   display: flex;
   justify-content: center;
   align-items: center;
@@ -179,7 +233,7 @@ body {
   background: var(--parchment-base);
   border-radius: 12px;
   box-shadow: 
-    0 30px 60px rgba(0, 0, 0, 0.9),
+    0 30px 60px rgba(10, 8, 12, 0.9),
     inset 0 0 100px rgba(120, 90, 45, 0.35);
   position: relative;
   overflow: hidden;
@@ -378,7 +432,7 @@ body {
   width: 32px;
   height: 140px;
   background: linear-gradient(180deg, #8b0000 0%, #4a0000 100%);
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 5px 15px rgba(10, 8, 12, 0.5);
   clip-path: polygon(0 0, 100% 0, 100% 85%, 50% 100%, 0 85%);
   cursor: pointer;
   z-index: 10;
@@ -414,7 +468,7 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 10px rgba(10, 8, 12, 0.4);
   transition: all 0.2s ease;
 }
 
@@ -515,7 +569,7 @@ body {
   padding: 40px;
   width: 90%;
   max-width: 400px;
-  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 30px 60px rgba(10, 8, 12, 0.7);
   text-align: center;
 }
 
@@ -624,7 +678,7 @@ body {
 .settings-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(10, 8, 12, 0.7);
   display: flex;
   justify-content: flex-end;
   z-index: 90;
@@ -633,12 +687,12 @@ body {
 .settings-panel {
   width: 320px;
   max-width: 90vw;
-  height: 100vh;
+  height: 100dvh;
   background: linear-gradient(180deg, #1a120b 0%, #0a080c 100%);
   border-left: 1px solid rgba(139, 107, 27, 0.4);
   padding: 24px;
   overflow-y: auto;
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.5);
+  box-shadow: -10px 0 30px rgba(10, 8, 12, 0.5);
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -669,4 +723,61 @@ body {
   letter-spacing: 1px;
   text-transform: uppercase;
   margin-bottom: 6px;
+}
+
+/* ----------------------------------------------------
+   PREFERS-REDUCED-MOTION: Disable all animations
+   ---------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .ink-sinking {
+    animation: none;
+    opacity: 0;
+  }
+
+  .full-page-riddle-container {
+    animation: none;
+    opacity: 1;
+  }
+
+  .ink-bleed-char {
+    animation: none;
+    opacity: 1;
+  }
+
+  .book-cover-closed {
+    transition: none;
+  }
+
+  .book-container {
+    transition: none;
+  }
+
+  .book-clasp {
+    transition: none;
+  }
+
+  .ribbon-bookmark {
+    transition: none;
+  }
+
+  .btn-quill {
+    transition: none;
+  }
+
+  .btn-icon {
+    transition: none;
+  }
+
+  .form-input {
+    transition: none;
+  }
+}
+
+/* ----------------------------------------------------
+   PREFERS-REDUCED-TRANSPARENCY: Solid fallback for blur
+   ---------------------------------------------------- */
+@media (prefers-reduced-transparency: reduce) {
+  .parchment-spread {
+    box-shadow: 0 30px 60px rgba(10, 8, 12, 0.9);
+  }
 }

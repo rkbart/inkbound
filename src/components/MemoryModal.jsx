@@ -21,7 +21,7 @@ export default function MemoryModal({ memories, onClose, onReset }) {
         border: '2px solid #b8860b',
         borderRadius: '12px',
         padding: '28px',
-        boxShadow: '0 20px 40px rgba(0,0,0,0.9), 0 0 2parchm0px rgba(212,175,55,0.2)',
+        boxShadow: '0 20px 40px rgba(10,8,12,0.9), 0 0 20px rgba(212,175,55,0.2)',
         color: '#f4ebd9',
         position: 'relative'
       }}>
