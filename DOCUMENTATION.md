@@ -419,7 +419,15 @@ inkbound/
 ├── data/
 │   ├── db.json           # JSON Database fallback file
 │   └── inkbound.db       # SQLite Database file
-├── public/               # Static public assets
+├── public/
+│   └── fonts/            # Self-hosted web fonts (@font-face)
+│       ├── CinzelDecorative-Bold.ttf
+│       ├── IMFellEnglish-Regular.ttf
+│       ├── IMFellEnglish-Italic.ttf
+│       ├── MarckScript-Regular.ttf
+│       ├── PlayfairDisplay-Regular.ttf
+│       ├── PlayfairDisplay-Italic.ttf
+│       └── PirataOne-Regular.ttf
 ├── server/
 │   ├── db.js             # Dual-tier database storage module
 │   ├── gemini.js         # Gemini AI & offline fallback engine
@@ -427,6 +435,7 @@ inkbound/
 ├── src/
 │   ├── components/
 │   │   ├── BookCover.jsx        # Interactive cover component
+│   │   ├── LoginPage.jsx        # User login/registration
 │   │   ├── MemoryModal.jsx      # Ribbon memory drawer modal
 │   │   ├── ParchmentSpread.jsx  # Two-page parchment spread
 │   │   └── TomRiddleWriter.jsx  # Ink bleed typewriter component
@@ -436,10 +445,12 @@ inkbound/
 │   ├── App.jsx                  # Main React application component
 │   ├── index.css                # Global design system & animations
 │   └── main.jsx                 # React root entrypoint
+├── .agents/skills/       # AI agent design skills (13 skills)
 ├── .env.example          # Environment variables template
 ├── index.html            # Main HTML document
 ├── package.json          # Node.js dependencies & scripts
 ├── README.md             # Overview documentation
+├── DOCUMENTATION.md      # Technical implementation docs
 └── vite.config.js        # Vite configuration
 ```
 

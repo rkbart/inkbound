@@ -21,7 +21,7 @@
 
 ## 🛠️ Tech Stack
 
-- **Frontend**: React 19, Vite, Lucide Icons, Web Audio API, Vanilla CSS (Custom Design System with Google Fonts `Cinzel Decorative` & `IM Fell English`)
+- **Frontend**: React 19, Vite, Lucide Icons, Web Audio API, Vanilla CSS (Custom Design System with self-hosted fonts: `Cinzel Decorative`, `IM Fell English`, `Marck Script`, `Playfair Display`)
 - **Backend**: Node.js, Express 5, CORS, Dotenv
 - **AI Integration**: `@google/genai` (Google Gemini AI SDK - `gemini-2.5-flash`)
 - **Database**: `better-sqlite3` with user-scoped data isolation and automated fallback to JSON file storage
