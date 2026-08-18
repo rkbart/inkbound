@@ -1,13 +1,6 @@
 const THEME_PATTERNS = {
-  name_intro: {
-    keywords: ['my name is', 'i am', 'call me', "i'm", 'i am called', 'they call me'],
-    category: 'Identity',
-    key: 'User Name',
-    importance: 5,
-    extractName: true
-  },
   identity_question: {
-    keywords: ['who are you', 'what is this', 'what are you', 'tell me about yourself'],
+    keywords: ['who are you', 'what is this', 'what are you', 'tell me about yourself', 'what is your name', "what's your name", 'do you have a name', 'tell me your name', 'introduce yourself'],
     category: null,
     key: null,
     importance: 0,
@@ -178,35 +171,45 @@ export function detectThemes(message) {
   const themes = [];
   const extracted = {};
 
+  const namePatterns = [
+    /my name is\s+[a-z]/i,
+    /\bi am\s+[a-z]/i,
+    /\bcall me\s+[a-z]/i,
+    /\bi'm\s+[a-z]/i,
+    /\bi am called\s+[a-z]/i,
+    /\bthey call me\s+[a-z]/i
+  ];
+  const isNameIntro = namePatterns.some(p => p.test(message));
+  if (isNameIntro) {
+    const name = extractNameFromMessage(message);
+    if (name) {
+      themes.push('name_intro');
+      extracted.name = {
+        category: 'Identity',
+        key: 'User Name',
+        value: name,
+        importance: 5
+      };
+    }
+  }
+
   for (const [theme, config] of Object.entries(THEME_PATTERNS)) {
+    if (theme === 'name_intro') continue;
     const matched = config.keywords.some(kw => lower.includes(kw));
     if (matched) {
       themes.push(theme);
 
       if (config.category && config.key) {
         let value;
-
-        if (theme === 'name_intro') {
-          value = extractNameFromMessage(message);
-          if (value) {
-            extracted.name = {
-              category: config.category,
-              key: config.key,
-              value: value,
-              importance: config.importance
-            };
-          }
-        } else {
-          value = extractContext(message, theme);
-          if (value && value.length > 3) {
-            const memoryKey = `${config.key}`;
-            extracted[theme] = {
-              category: config.category,
-              key: memoryKey,
-              value: value,
-              importance: config.importance
-            };
-          }
+        value = extractContext(message, theme);
+        if (value && value.length > 3) {
+          const memoryKey = `${config.key}`;
+          extracted[theme] = {
+            category: config.category,
+            key: memoryKey,
+            value: value,
+            importance: config.importance
+          };
         }
       }
     }

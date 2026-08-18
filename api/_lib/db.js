@@ -5,6 +5,15 @@ const conn = connect({
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
+function toObjects(result) {
+  const cols = result.columns;
+  return result.rows.map(row => {
+    const obj = {};
+    cols.forEach((col, i) => { obj[col] = row[i]; });
+    return obj;
+  });
+}
+
 export const dbService = {
   async addEntry(content, response, username, mood = 'neutral') {
     const result = await conn.session.execute(
@@ -19,7 +28,7 @@ export const dbService = {
       'SELECT * FROM entries WHERE username = ? ORDER BY created_at ASC',
       [username]
     );
-    return result.rows;
+    return toObjects(result);
   },
 
   async upsertMemory(category, key, value, username, importance = 3) {
@@ -31,7 +40,7 @@ export const dbService = {
     if (existing.rows.length > 0) {
       await conn.session.execute(
         'UPDATE memories SET value = ?, category = ?, importance = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-        [value, category, importance, existing.rows[0].id]
+        [value, category, importance, existing.rows[0][0]]
       );
     } else {
       await conn.session.execute(
@@ -46,7 +55,7 @@ export const dbService = {
       'SELECT * FROM memories WHERE username = ? ORDER BY importance DESC, last_seen DESC',
       [username]
     );
-    return result.rows;
+    return toObjects(result);
   },
 
   async addMessage(role, content, username) {
@@ -61,7 +70,7 @@ export const dbService = {
       'SELECT role, content FROM conversation WHERE username = ? ORDER BY id DESC LIMIT ?',
       [username, limit]
     );
-    return result.rows.reverse();
+    return toObjects(result).reverse();
   },
 
   async clearUserData(username) {
