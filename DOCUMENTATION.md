@@ -36,7 +36,7 @@ sequenceDiagram
     participant App as React Frontend (Vite)
     participant Audio as Web Audio Synthesizer
     participant API as Vercel Serverless / Local API
-    participant Nemotron as NVIDIA Nemotron 3.5 Lightning
+    participant Nemotron as Llama 3.1 70B (NVIDIA NIM)
     participant Fallback as Pre-written Response Trees
     participant DB as Turso (SQLite over HTTP)
 
@@ -120,10 +120,10 @@ api/
 
 ### Nemotron AI Integration
 
-The primary intelligence uses NVIDIA Nemotron 3.5 Lightning via the NIM API (OpenAI-compatible endpoint).
+The primary intelligence uses Llama 3.1 70B Instruct via the NIM API (OpenAI-compatible endpoint).
 
 **API endpoint:** `https://integrate.api.nvidia.com/v1/chat/completions`
-**Model:** `nvidia/nemotron-3.5-lightning-30b-a3b`
+**Model:** `meta/llama-3.1-70b-instruct`
 
 The integration works by:
 1. Building a system prompt with the Tom Riddle persona (1940s British tone)
@@ -389,7 +389,7 @@ inkbound/
 │   ├── _lib/                     # Shared utilities
 │   │   ├── db.js                 # Turso client (lazy connection)
 │   │   ├── diary.js              # Main interaction logic (routes AI or fallback)
-│   │   ├── nemotron.js           # NVIDIA Nemotron API client
+│   │   ├── nemotron.js           # NVIDIA NIM API client
 │   │   ├── themes.js             # Theme detection (regex + keywords, fallback)
 │   │   ├── responses.js          # ~250 curated responses (fallback)
 │   │   ├── brancher.js           # Branch/tier selection (fallback)

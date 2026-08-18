@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Sparkles } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 
 export default function BookCover({ onOpen }) {
   return (
@@ -33,21 +33,17 @@ export default function BookCover({ onOpen }) {
         <Sparkles size={36} color="#d4af37" />
       </div>
 
-      {/* Clasp & Prompt */}
-      <div style={{ textAlign: 'center' }}>
-        <div className="book-clasp" title="Click to unlatch diary">
-          <BookOpen size={20} color="#1a120b" />
-        </div>
-        <p style={{
-          fontFamily: 'var(--font-serif)',
-          fontSize: '0.9rem',
-          fontStyle: 'italic',
-          color: '#a88d52',
-          letterSpacing: '1px'
-        }}>
-          Click cover to open
-        </p>
-      </div>
+      {/* Prompt */}
+      <p style={{
+        fontFamily: 'var(--font-serif)',
+        fontSize: '0.9rem',
+        fontStyle: 'italic',
+        color: '#a88d52',
+        letterSpacing: '1px',
+        textAlign: 'center'
+      }}>
+        Click cover to open
+      </p>
     </div>
   );
 }

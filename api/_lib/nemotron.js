@@ -1,7 +1,6 @@
 import { dbService } from './db.js';
 
-const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
-const NEMOTRON_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b';
+const NEMOTRON_MODEL = 'meta/llama-3.1-70b-instruct';
 const NEMOTRON_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
 const SYSTEM_PROMPT = `
@@ -44,7 +43,8 @@ function buildSystemPrompt(personaName) {
 }
 
 export async function interactWithNemotron(userMessage, personaName = 'Tom Riddle', username = 'anonymous') {
-  if (!NVIDIA_API_KEY) return null;
+  const apiKey = process.env.NVIDIA_API_KEY;
+  if (!apiKey) return null;
 
   await dbService.addMessage('user', userMessage, username);
 
@@ -78,7 +78,7 @@ export async function interactWithNemotron(userMessage, personaName = 'Tom Riddl
     const res = await fetch(NEMOTRON_URL, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${NVIDIA_API_KEY}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
@@ -86,8 +86,7 @@ export async function interactWithNemotron(userMessage, personaName = 'Tom Riddl
         messages,
         temperature: 0.9,
         max_tokens: 512,
-        top_p: 0.95,
-        response_format: { type: 'json_object' }
+        top_p: 0.95
       })
     });
 
@@ -101,7 +100,22 @@ export async function interactWithNemotron(userMessage, personaName = 'Tom Riddl
     const rawText = data.choices?.[0]?.message?.content;
     if (!rawText) return null;
 
-    const parsed = JSON.parse(rawText);
+    let parsed;
+    try {
+      parsed = JSON.parse(rawText);
+    } catch {
+      const allJson = [...rawText.matchAll(/\{[\s\S]*?\}/g)];
+      for (const match of allJson) {
+        try {
+          const obj = JSON.parse(match[0]);
+          if (obj.response_text) { parsed = obj; break; }
+        } catch {}
+      }
+      if (!parsed) {
+        const clean = rawText.replace(/^[\s\S]*?(?:response_text["\s:]+)/i, '').replace(/["',].*$/m, '').trim();
+        parsed = { should_reply: true, response_text: clean || "The ink stirs... but words escape me.", extracted_memories: [] };
+      }
+    }
 
     if (parsed.extracted_memories && Array.isArray(parsed.extracted_memories)) {
       for (const mem of parsed.extracted_memories) {

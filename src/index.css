@@ -203,24 +203,6 @@ body {
   margin-top: 12px;
 }
 
-/* Latch Clasp */
-.book-clasp {
-  width: 40px;
-  height: 60px;
-  background: linear-gradient(180deg, #d4af37 0%, #8b6b1b 100%);
-  border-radius: 4px;
-  box-shadow: 0 4px 10px rgba(10, 8, 12, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  margin-bottom: 40px;
-  transition: transform 0.2s ease;
-}
-
-.book-clasp:hover {
-  transform: scale(1.1);
-}
 
 /* ----------------------------------------------------
    OPEN PARCHMENT TWO-PAGE SPREAD
@@ -757,10 +739,6 @@ body {
   }
 
   .book-container {
-    transition: none;
-  }
-
-  .book-clasp {
     transition: none;
   }
 

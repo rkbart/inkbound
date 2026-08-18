@@ -8,7 +8,7 @@
 
 ## Features
 
-- **AI-Powered Diary Character**: Powered by NVIDIA Nemotron 3.5 Lightning, the diary understands context, remembers your secrets, and responds in a formal 1940s British voice. Falls back to 250+ pre-written responses when no API key is set.
+- **AI-Powered Diary Character**: Powered by Llama 3.1 70B Instruct via NVIDIA NIM API, the diary understands context, remembers your secrets, and responds in a formal 1940s British voice. Falls back to 250+ pre-written responses when no API key is set.
 - **Interactive Antique Journal**: Realistically styled leather-bound diary with gold-embossed lettering, brass corner plates, and spine shadows.
 - **Toggle Memory Visibility**: Eye icon button to hide or show the parchment memory ledger. Entries auto-scroll to the bottom when new ones appear.
 - **Magic Ink Dissolve & Bleed Animation**: User input smoothly fades into parchment fibers before the diary's handwriting resurfaces character-by-character.
@@ -23,7 +23,7 @@
 
 - **Frontend**: React 19, Vite, Lucide Icons, Web Audio API, Vanilla CSS (Custom Design System with self-hosted fonts: `Cinzel Decorative`, `IM Fell English`, `Marck Script`, `Playfair Display`)
 - **Backend**: Vercel Serverless Functions (Node.js) + local dev server
-- **AI**: NVIDIA Nemotron 3.5 Lightning via NIM API (OpenAI-compatible)
+- **AI**: Llama 3.1 70B Instruct via NVIDIA NIM API (OpenAI-compatible)
 - **Database**: Turso (hosted SQLite via HTTP) with `@tursodatabase/serverless`
 - **Fallback**: Pre-written branching conversation trees with 250+ curated responses
 
@@ -108,7 +108,7 @@ vercel --prod
 1. User writes on the parchment and presses Enter
 2. The ink dissolves into the paper with a visual animation
 3. The entry is sent to the backend along with conversation history and extracted memories
-4. **With API key**: NVIDIA Nemotron understands the context and generates an intelligent, personalized response in the diary's 1940s British voice
+4. **With API key**: Llama 3.1 70B Instruct understands the context and generates an intelligent, personalized response in the diary's 1940s British voice
 5. **Without API key**: The pre-written branching conversation tree system selects a themed response
 6. The response resurfaces character-by-character with ink bleed animations
 7. Memories are extracted and persisted for future personalization
