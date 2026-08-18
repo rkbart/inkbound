@@ -1,9 +1,15 @@
 import { connect } from "@tursodatabase/serverless";
 
-const conn = connect({
-  url: process.env.TURSO_DATABASE_URL,
-  authToken: process.env.TURSO_AUTH_TOKEN,
-});
+let conn;
+function getConn() {
+  if (!conn) {
+    conn = connect({
+      url: process.env.TURSO_DATABASE_URL,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    });
+  }
+  return conn;
+}
 
 function toObjects(result) {
   const cols = result.columns;
@@ -16,7 +22,7 @@ function toObjects(result) {
 
 export const dbService = {
   async addEntry(content, response, username, mood = 'neutral') {
-    const result = await conn.session.execute(
+    const result = await getConn().session.execute(
       'INSERT INTO entries (username, content, response, mood) VALUES (?, ?, ?, ?)',
       [username, content, response || null, mood]
     );
@@ -24,7 +30,7 @@ export const dbService = {
   },
 
   async getEntries(username) {
-    const result = await conn.session.execute(
+    const result = await getConn().session.execute(
       'SELECT * FROM entries WHERE username = ? ORDER BY created_at ASC',
       [username]
     );
@@ -51,7 +57,7 @@ export const dbService = {
   },
 
   async getMemories(username) {
-    const result = await conn.session.execute(
+    const result = await getConn().session.execute(
       'SELECT * FROM memories WHERE username = ? ORDER BY importance DESC, last_seen DESC',
       [username]
     );
@@ -66,7 +72,7 @@ export const dbService = {
   },
 
   async getRecentHistory(username, limit = 10) {
-    const result = await conn.session.execute(
+    const result = await getConn().session.execute(
       'SELECT role, content FROM conversation WHERE username = ? ORDER BY id DESC LIMIT ?',
       [username, limit]
     );
