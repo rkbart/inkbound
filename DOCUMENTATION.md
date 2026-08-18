@@ -27,7 +27,7 @@ This document provides a comprehensive technical breakdown of how **Inkbound** w
 
 ## 1. Architectural Overview
 
-Inkbound is built as a serverless application deployed on Vercel with Turso (hosted SQLite) as the database. The frontend renders an interactive 3D leather journal, while the backend uses branching conversation trees to generate diary responses without any external AI API calls.
+Inkbound is built as a serverless application deployed on Vercel with Turso (hosted SQLite) as the database. The frontend renders an interactive 3D leather journal. The backend uses **NVIDIA Nemotron 3.5 Lightning** (via the NIM API) as the primary intelligence, with a pre-written branching conversation tree system as fallback when no API key is set.
 
 ```mermaid
 sequenceDiagram
@@ -36,8 +36,8 @@ sequenceDiagram
     participant App as React Frontend (Vite)
     participant Audio as Web Audio Synthesizer
     participant API as Vercel Serverless / Local API
-    participant Themes as Theme Detector
-    participant Diary as Conversation Tree Engine
+    participant Nemotron as NVIDIA Nemotron 3.5 Lightning
+    participant Fallback as Pre-written Response Trees
     participant DB as Turso (SQLite over HTTP)
 
     User->>App: Clicks Leather Cover / Opens Book
@@ -46,11 +46,14 @@ sequenceDiagram
     App->>Audio: Play Pen Scratch & Ink Sink Shimmer Sound
     App->>App: Trigger CSS Ink Dissolve Animation (1.8s)
     App->>API: POST /api/interact { content, personaName, username }
-    API->>Themes: Detect themes in user message
-    Themes-->>API: { themes: ['fear', 'secret'], extracted: {...} }
     API->>DB: Fetch memories & conversation history
-    API->>Diary: Select response pool & tier
-    Diary-->>API: Curated response with memory references
+    alt NVIDIA_API_KEY is set
+        API->>Nemotron: Send prompt with persona, memories, history
+        Nemotron-->>API: JSON { should_reply, response_text, extracted_memories }
+    else No API key or API error
+        API->>Fallback: Detect themes, select tier, pick response
+        Fallback-->>API: Curated response
+    end
     API->>DB: Save extracted memories & entry
     API-->>App: JSON response payload
     App->>Audio: Play Ink Resurface Sound
@@ -103,16 +106,37 @@ The production backend runs as Vercel serverless functions under the `api/` dire
 api/
 ├── _lib/
 │   ├── db.js              # Turso client + database operations
-│   ├── diary.js           # Main interaction logic
-│   ├── themes.js          # Theme detection (12 themes)
-│   ├── responses.js       # ~250 curated responses
-│   ├── brancher.js        # Branch selection logic
-│   └── picker.js          # Response picking + personalization
+│   ├── diary.js           # Main interaction logic (routes to AI or fallback)
+│   ├── nemotron.js        # NVIDIA Nemotron API client
+│   ├── themes.js          # Theme detection (12 themes, fallback system)
+│   ├── responses.js       # ~250 curated responses (fallback system)
+│   ├── brancher.js        # Branch selection logic (fallback system)
+│   └── picker.js          # Response picking + personalization (fallback system)
 ├── interact.js            # POST /api/interact
 ├── entries.js             # GET /api/entries
 ├── memories.js            # GET /api/memories
 └── reset.js               # POST /api/reset
 ```
+
+### Nemotron AI Integration
+
+The primary intelligence uses NVIDIA Nemotron 3.5 Lightning via the NIM API (OpenAI-compatible endpoint).
+
+**API endpoint:** `https://integrate.api.nvidia.com/v1/chat/completions`
+**Model:** `nvidia/nemotron-3.5-lightning-30b-a3b`
+
+The integration works by:
+1. Building a system prompt with the Tom Riddle persona (1940s British tone)
+2. Injecting extracted memories as context (`• [Category] Key: Value`)
+3. Including the last 8 conversation messages for continuity
+4. Sending to Nemotron with `response_format: { type: 'json_object' }`
+5. Parsing the JSON response for `should_reply`, `response_text`, and `extracted_memories`
+
+**Personality prompt highlights:**
+- "Polite, articulate, charming, curious, and quietly intense"
+- "Speak in formal, elegant 1940s British English"
+- "Deeply interested in the user's secrets, fears, desires, names, rivals"
+- "NEVER use modern slang, tech jargon, or AI disclaimers"
 
 ### Local Development Server
 
@@ -123,8 +147,8 @@ npm run dev
 ```
 
 This starts two processes via `concurrently`:
-1. **Local API server** (`server-dev.js` on port 3001) — imports the same `api/_lib/` handlers
-2. **Vite dev server** (port 5173) — proxies `/api/*` requests to port 3001
+1. **Local API server** (`server-dev.js` on port 3001)
+2. **Vite dev server** (port 5173) with proxy to port 3001
 
 The Vite proxy is configured in `vite.config.js`:
 ```javascript
@@ -364,11 +388,12 @@ inkbound/
 ├── api/                          # Vercel serverless functions
 │   ├── _lib/                     # Shared utilities
 │   │   ├── db.js                 # Turso client (lazy connection)
-│   │   ├── diary.js              # Main interaction logic
-│   │   ├── themes.js             # Theme detection (regex + keywords)
-│   │   ├── responses.js          # ~250 curated responses
-│   │   ├── brancher.js           # Branch/tier selection
-│   │   └── picker.js             # Response picking + personalization
+│   │   ├── diary.js              # Main interaction logic (routes AI or fallback)
+│   │   ├── nemotron.js           # NVIDIA Nemotron API client
+│   │   ├── themes.js             # Theme detection (regex + keywords, fallback)
+│   │   ├── responses.js          # ~250 curated responses (fallback)
+│   │   ├── brancher.js           # Branch/tier selection (fallback)
+│   │   └── picker.js             # Response picking + personalization (fallback)
 │   ├── interact.js               # POST /api/interact
 │   ├── entries.js                # GET /api/entries
 │   ├── memories.js               # GET /api/memories
@@ -384,7 +409,7 @@ inkbound/
 ├── server-dev.js                 # Local API dev server (port 3001)
 ├── schema.sql                    # Database schema
 ├── vercel.json                   # Vercel configuration
-├── .env                          # Local Turso credentials (gitignored)
+├── .env                          # Local credentials (gitignored)
 ├── .env.example                  # Example env file
 ├── package.json                  # Dependencies
 └── vite.config.js                # Vite config with API proxy
@@ -394,7 +419,8 @@ inkbound/
 
 ```env
 TURSO_DATABASE_URL=libsql://your-db.turso.io
-TURSO_AUTH_TOKEN=your-token-here
+TURSO_AUTH_TOKEN=your-turso-token
+NVIDIA_API_KEY=nvapi-your-nvidia-key
 ```
 
 ### Available Scripts

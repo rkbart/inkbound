@@ -1,13 +1,21 @@
+import { interactWithNemotron } from './nemotron.js';
 import { detectThemes } from './themes.js';
 import { dbService } from './db.js';
 import { selectResponsePool } from './brancher.js';
 import { pickResponse, pickSilentResponse } from './picker.js';
 
 export async function interactWithDiary(userMessage, personaName = 'Tom Riddle', username = 'anonymous') {
+  const nemotronResult = await interactWithNemotron(userMessage, personaName, username);
+  if (nemotronResult) return nemotronResult;
+
+  return fallbackResponse(userMessage, personaName, username);
+}
+
+async function fallbackResponse(userMessage, personaName, username) {
+  await dbService.addMessage('user', userMessage, username);
+
   const memories = await dbService.getMemories(username);
   const history = await dbService.getRecentHistory(username, 20);
-
-  await dbService.addMessage('user', userMessage, username);
 
   if (username !== 'anonymous' && !memories.find(m => m.key === 'User Name')) {
     await dbService.upsertMemory('Identity', 'User Name', username, username, 5);
