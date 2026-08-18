@@ -548,29 +548,29 @@ body {
 
 .history-entry-item {
   border-bottom: 1px dashed rgba(139, 107, 27, 0.3);
-  padding: 12px 0;
+  padding: 8px 0;
 }
 
 .history-user-text {
   font-family: var(--font-ink);
-  font-size: 1.4rem;
+  font-size: 1.15rem;
   color: #4a3e3d;
   font-style: italic;
 }
 
 .history-riddle-text {
   font-family: var(--font-ink);
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   color: var(--ink-riddle);
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .history-entry-date {
   font-family: var(--font-body);
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: rgba(139, 107, 27, 0.5);
   font-style: italic;
-  margin-top: 4px;
+  margin-top: 2px;
   text-align: right;
 }
 
