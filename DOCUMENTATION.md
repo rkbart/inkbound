@@ -27,7 +27,7 @@ This document provides a comprehensive technical breakdown of how **Inkbound** w
 
 ## 1. Architectural Overview
 
-Inkbound is built as a serverless application deployed on Vercel with Turso (hosted SQLite) as the database. The frontend renders an interactive 3D leather journal. The backend uses **NVIDIA Nemotron 3.5 Lightning** (via the NIM API) as the primary intelligence, with a pre-written branching conversation tree system as fallback when no API key is set.
+Inkbound is built as a serverless application deployed on Vercel with Turso (hosted SQLite) as the database. The frontend renders an interactive 3D leather journal. The backend uses **Llama 3.1 8B Instruct** (via the NIM API) as the primary intelligence, with a pre-written branching conversation tree system as fallback when no API key is set.
 
 ```mermaid
 sequenceDiagram
@@ -36,7 +36,7 @@ sequenceDiagram
     participant App as React Frontend (Vite)
     participant Audio as Web Audio Synthesizer
     participant API as Vercel Serverless / Local API
-    participant Nemotron as Llama 3.1 70B (NVIDIA NIM)
+    participant Nemotron as Llama 3.1 8B (NVIDIA NIM)
     participant Fallback as Pre-written Response Trees
     participant DB as Turso (SQLite over HTTP)
 
@@ -69,7 +69,7 @@ The frontend is implemented using **React 19** and **Vite**, structured into mod
 ### Component Structure
 
 - **App.jsx**: Root component managing top-level state: book open/closed state, entries log, memories bank, modal visibility, and backend fetch/sync lifecycle handlers.
-- **BookCover.jsx**: Renders the closed leather-bound book cover featuring embossed typography, gold corner plates, center glowing crest, and interactive unlatching book clasp button.
+- **BookCover.jsx**: Renders the closed leather-bound book cover featuring embossed typography, gold corner plates, and center glowing crest.
 - **ParchmentSpread.jsx**: The main interactive two-page spread with left page (memory ledger with pagination) and right page (writing/response view).
 - **TomRiddleWriter.jsx**: Typewriter component that renders text character-by-character with staggered CSS ink bleed animations.
 - **MemoryModal.jsx**: Overlay modal visualizing the extracted user memory bank.
@@ -120,23 +120,26 @@ api/
 
 ### Nemotron AI Integration
 
-The primary intelligence uses Llama 3.1 70B Instruct via the NIM API (OpenAI-compatible endpoint).
+The primary intelligence uses Llama 3.1 8B Instruct via the NIM API (OpenAI-compatible endpoint).
 
 **API endpoint:** `https://integrate.api.nvidia.com/v1/chat/completions`
-**Model:** `meta/llama-3.1-70b-instruct`
+**Model:** `meta/llama-3.1-8b-instruct`
 
 The integration works by:
 1. Building a system prompt with the Tom Riddle persona (1940s British tone)
 2. Injecting extracted memories as context (`• [Category] Key: Value`)
 3. Including the last 8 conversation messages for continuity
-4. Sending to Nemotron with `response_format: { type: 'json_object' }`
+4. Sending to the NIM API
 5. Parsing the JSON response for `should_reply`, `response_text`, and `extracted_memories`
+6. If JSON parsing fails, falls back to using raw model text as the response
+7. Sanitizing `response_text` to strip any leaked JSON artifacts
 
 **Personality prompt highlights:**
 - "Polite, articulate, charming, curious, and quietly intense"
 - "Speak in formal, elegant 1940s British English"
 - "Deeply interested in the user's secrets, fears, desires, names, rivals"
 - "NEVER use modern slang, tech jargon, or AI disclaimers"
+- "ALWAYS reply to every message"
 
 ### Local Development Server
 
@@ -212,7 +215,7 @@ A common words filter prevents false extractions (e.g., "I am afraid" does not e
 
 ### Turso Database Layer
 
-Uses `@tursodatabase/serverless` with lazy connection initialization:
+Uses `@tursodatabase/serverless` with lazy connection initialization and automatic retry on failure:
 
 ```javascript
 import { connect } from "@tursodatabase/serverless";
@@ -227,7 +230,20 @@ function getConn() {
   }
   return conn;
 }
+
+function resetConn() { conn = null; }
+
+async function execute(sql, args) {
+  try {
+    return await getConn().session.execute(sql, args);
+  } catch (err) {
+    resetConn();
+    return await getConn().session.execute(sql, args);
+  }
+}
 ```
+
+**Why retry?** Turso's serverless connection goes stale on warm Vercel instances — reads work but writes fail with 404. The `execute()` helper catches the error, resets the connection, and retries once.
 
 **Key API pattern** — args go as the second argument to `session.execute()`:
 ```javascript
@@ -387,9 +403,9 @@ CREATE TABLE IF NOT EXISTS conversation (
 inkbound/
 ├── api/                          # Vercel serverless functions
 │   ├── _lib/                     # Shared utilities
-│   │   ├── db.js                 # Turso client (lazy connection)
+│   │   ├── db.js                 # Turso client with connection retry
 │   │   ├── diary.js              # Main interaction logic (routes AI or fallback)
-│   │   ├── nemotron.js           # NVIDIA NIM API client
+│   │   ├── nemotron.js           # NVIDIA NIM API client (Llama 3.1 8B)
 │   │   ├── themes.js             # Theme detection (regex + keywords, fallback)
 │   │   ├── responses.js          # ~250 curated responses (fallback)
 │   │   ├── brancher.js           # Branch/tier selection (fallback)
