@@ -85,17 +85,23 @@ for (const [theme, config] of Object.entries(THEME_PATTERNS)) {
 
 function extractNameFromMessage(message) {
   const patterns = [
-    /my name is\s+([A-Z][a-z]+)/i,
-    /\bi am\s+([A-Z][a-z]+)/i,
-    /\bcall me\s+([A-Z][a-z]+)/i,
-    /\bi'm\s+([A-Z][a-z]+)/i,
-    /\bi am called\s+([A-Z][a-z]+)/i,
-    /\bthey call me\s+([A-Z][a-z]+)/i
+    /my name is\s+([a-zA-Z]+)/i,
+    /\bi am\s+([a-zA-Z]+)/i,
+    /\bcall me\s+([a-zA-Z]+)/i,
+    /\bi'm\s+([a-zA-Z]+)/i,
+    /\bi am called\s+([a-zA-Z]+)/i,
+    /\bthey call me\s+([a-zA-Z]+)/i
   ];
+
+  const commonWords = ['afraid', 'scared', 'worried', 'tired', 'happy', 'sad', 'angry', 'sure', 'fine', 'okay', 'lost', 'alone', 'here', 'there', 'now', 'then', 'not', 'never', 'always', 'very', 'really', 'just', 'also', 'still', 'already', 'even', 'quite', 'about', 'going', 'coming', 'feeling', 'thinking', 'trying', 'hoping', 'wondering', 'so', 'a', 'an', 'the', 'good', 'bad', 'new', 'old', 'big', 'small', 'one', 'two', 'three'];
 
   for (const pattern of patterns) {
     const match = message.match(pattern);
-    if (match) return match[1];
+    if (match) {
+      const raw = match[1];
+      if (commonWords.includes(raw.toLowerCase())) continue;
+      return raw.charAt(0).toUpperCase() + raw.slice(1);
+    }
   }
   return null;
 }

@@ -11,7 +11,6 @@ const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN;
 
 if (!TURSO_URL || !TURSO_TOKEN) {
   console.error('Error: TURSO_DATABASE_URL and TURSO_AUTH_TOKEN environment variables are required.');
-  console.error('Run: export TURSO_DATABASE_URL="libsql://..." TURSO_AUTH_TOKEN="..."');
   process.exit(1);
 }
 
@@ -28,7 +27,7 @@ console.log('Setting up Turso database schema...');
 
 for (const stmt of statements) {
   try {
-    conn.exec(stmt);
+    const result = await conn.session.execute(stmt);
     console.log('  OK:', stmt.slice(0, 60) + (stmt.length > 60 ? '...' : ''));
   } catch (err) {
     console.error('  Failed:', stmt.slice(0, 60) + '...');
@@ -36,5 +35,13 @@ for (const stmt of statements) {
   }
 }
 
-console.log('Schema setup complete.');
+// Verify tables
+try {
+  const r = await conn.session.execute("SELECT name FROM sqlite_master WHERE type = 'table'");
+  console.log('\nTables created:', r.rows.map(row => row[0]).join(', '));
+} catch (err) {
+  console.error('Verification failed:', err.message);
+}
+
+console.log('\nSchema setup complete.');
 process.exit(0);
