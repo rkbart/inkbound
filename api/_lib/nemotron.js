@@ -114,11 +114,17 @@ export async function interactWithNemotron(userMessage, personaName = 'Tom Riddl
       if (!parsed) {
         const responseMatch = rawText.match(/"response_text"\s*:\s*"((?:[^"\\]|\\.)*)"/);
         const responseText = responseMatch ? responseMatch[1].replace(/\\"/g, '"').replace(/\\n/g, '\n') : null;
-        parsed = {
-          should_reply: !!responseText,
-          response_text: responseText || "The ink stirs... but words escape me.",
-          extracted_memories: []
-        };
+        if (responseText) {
+          parsed = { should_reply: true, response_text: responseText, extracted_memories: [] };
+        } else {
+          const clean = rawText.replace(/```[\s\S]*$/, '').replace(/\n{3,}/g, '\n\n').trim();
+          const isJunk = clean.length < 5 || /^[\s{}"',:]+$/.test(clean) || /"should_reply"|"response_text"|"extracted_memories"/.test(clean);
+          parsed = {
+            should_reply: !isJunk && clean.length > 0,
+            response_text: isJunk ? null : clean,
+            extracted_memories: []
+          };
+        }
       }
     }
 
