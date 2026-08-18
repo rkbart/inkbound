@@ -1,24 +1,16 @@
 {
   "name": "inkbound",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"node server/server.js\" \"vite\"",
-    "server": "node server/server.js",
-    "client": "vite",
+    "dev": "concurrently \"node server-dev.js\" \"vite\"",
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "^2.13.0",
-    "better-sqlite3": "^13.0.1",
-    "canvas-confetti": "^1.9.4",
-    "concurrently": "^10.0.4",
-    "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
+    "@tursodatabase/serverless": "^1.2.3",
     "lucide-react": "^1.27.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
@@ -27,6 +19,7 @@
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "concurrently": "^10.0.4",
     "oxlint": "^1.71.0",
     "vite": "^8.1.1"
   }

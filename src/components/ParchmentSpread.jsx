@@ -20,6 +20,7 @@ export default function ParchmentSpread({
   const [showEntries, setShowEntries] = useState(false);
   const [currentPage, setCurrentPage] = useState(0);
   const [responseViewIndex, setResponseViewIndex] = useState(-1);
+  const [showSkeleton, setShowSkeleton] = useState(false);
   const entriesPerPage = 3;
   const textareaRef = useRef(null);
 
@@ -42,11 +43,6 @@ export default function ParchmentSpread({
     if (currentPage > 0) setCurrentPage(currentPage - 1);
   };
 
-  const goOlderResponse = () => {
-    const target = responseViewIndex < 0 ? entries.length - 2 : responseViewIndex - 1;
-    if (target >= 0) setResponseViewIndex(target);
-  };
-
   const goNewerResponse = () => {
     if (responseViewIndex >= 0) {
       if (responseViewIndex < entries.length - 1) {
@@ -57,9 +53,6 @@ export default function ParchmentSpread({
     }
   };
 
-  const hasOlderResponses = responseViewIndex < 0
-    ? entries.length > 1
-    : responseViewIndex > 0;
   const hasNewerResponses = responseViewIndex >= 0;
 
   const currentDateStr = new Date().toLocaleDateString('en-GB', {
@@ -95,8 +88,15 @@ export default function ParchmentSpread({
       setInputText('');
       setIsSinking(false);
       setViewState('response');
+      setShowSkeleton(true);
 
+      const loadStart = Date.now();
       const result = await onInteract(currentMessage);
+      const elapsed = Date.now() - loadStart;
+      const remaining = Math.max(0, 800 - elapsed);
+      if (remaining > 0) await new Promise(r => setTimeout(r, remaining));
+
+      setShowSkeleton(false);
 
       if (result && result.should_reply && result.response_text) {
         setActiveReply(result.response_text);
@@ -152,7 +152,7 @@ export default function ParchmentSpread({
 
         {showEntries && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            {entries.length === 0 ? (
+            {entries.length === 0 && !showSkeleton ? (
               <div style={{ textAlign: 'center', color: '#8c7355', marginTop: '60px', fontStyle: 'italic' }}>
                 <Sparkles size={28} color="#b8860b" style={{ marginBottom: '12px' }} />
                 <p>The pages are blank.</p>
@@ -182,10 +182,17 @@ export default function ParchmentSpread({
                     )}
                   </div>
                 ))}
+                {showSkeleton && (
+                  <div className="skeleton-entry">
+                    <div className="skeleton-line user" />
+                    <div className="skeleton-line diary" />
+                    <div className="skeleton-line date" />
+                  </div>
+                )}
               </div>
             )}
             {totalPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', paddingTop: '4px', borderTop: '1px dashed rgba(139,107,27,0.2)' }}>
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', paddingTop: '4px', borderTop: '1px dashed rgba(139,107,27,0.3)' }}>
                 {currentPage > 0 ? (
                   <button className="btn-icon" onClick={goPrevPage} title="Previous page">
                     <ChevronLeft size={16} />
@@ -207,7 +214,7 @@ export default function ParchmentSpread({
 
       <div className="page-right">
         <div className="page-header">
-          <span className="date-stamp" style={{ fontSize: '0.95rem' }}>{currentDateStr}</span>
+          <span className="date-stamp">{currentDateStr}</span>
         </div>
 
         {viewState === 'write' || viewState === 'sinking' ? (
@@ -224,16 +231,23 @@ export default function ParchmentSpread({
               autoFocus
             />
 
-            <div className="action-toolbar" style={{ justifyContent: 'center', borderTop: '1px dashed rgba(139,107,27,0.3)', paddingTop: '10px' }}>
+            <div className="action-toolbar" style={{ justifyContent: 'center', borderTop: '1px dashed rgba(139,107,27,0.3)', paddingTop: '6px' }}>
               <span style={{ fontSize: '0.8rem', color: '#8c7355', fontStyle: 'italic' }}>
-                Press Enter or double tap to let paper absorb your words
+                Double tap to let paper absorb your words
               </span>
             </div>
           </div>
         ) : (
           <div className="full-page-riddle-container" onDoubleClick={handleWriteNextEntry} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleWriteNextEntry(); } }} tabIndex={0}>
             <div className="riddle-full-text-area" style={{ overflow: 'hidden' }}>
-              {(() => {
+              {showSkeleton ? (
+                <div style={{ padding: '12px 0' }}>
+                  <div className="skeleton-line long" />
+                  <div className="skeleton-line medium" />
+                  <div className="skeleton-line long" />
+                  <div className="skeleton-line short" />
+                </div>
+              ) : (() => {
                 const isViewingHistory = responseViewIndex >= 0 && responseViewIndex < entries.length;
                 if (isViewingHistory) {
                   const entry = entries[responseViewIndex];
@@ -259,15 +273,10 @@ export default function ParchmentSpread({
               })()}
             </div>
 
-            <div className="action-toolbar" style={{ justifyContent: 'center', borderTop: '1px dashed rgba(139,107,27,0.3)', paddingTop: '10px' }}>
+            <div className="action-toolbar" style={{ justifyContent: 'center', borderTop: '1px dashed rgba(139,107,27,0.3)', paddingTop: '6px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                {hasOlderResponses && (
-                  <button className="btn-icon" onClick={(e) => { e.stopPropagation(); goOlderResponse(); }} title="Previous entry">
-                    <ChevronLeft size={16} />
-                  </button>
-                )}
                 <span style={{ fontSize: '0.8rem', color: '#8c7355', fontStyle: 'italic' }}>
-                  {responseViewIndex >= 0 ? `Entry ${responseViewIndex + 1} of ${entries.length}` : 'Press Enter or double tap to write next entry'}
+                  {responseViewIndex >= 0 ? `Entry ${responseViewIndex + 1} of ${entries.length}` : 'Double tap to write next entry'}
                 </span>
                 {hasNewerResponses && (
                   <button className="btn-icon" onClick={(e) => { e.stopPropagation(); goNewerResponse(); }} title="Next entry">

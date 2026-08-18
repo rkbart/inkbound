@@ -2,16 +2,14 @@ import React, { useState, useEffect } from 'react';
 import BookCover from './components/BookCover';
 import ParchmentSpread from './components/ParchmentSpread';
 import LoginPage from './components/LoginPage';
-import MemoryModal from './components/MemoryModal';
 import { diaryAudio } from './utils/audio';
 
-const API_BASE = 'http://localhost:3001/api';
+const API_BASE = '/api';
 
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
   const [entries, setEntries] = useState([]);
   const [memories, setMemories] = useState([]);
-  const [showMemoriesModal, setShowMemoriesModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState(null);
@@ -142,25 +140,6 @@ export default function App() {
     return { should_reply: true, response_text: fallbackReply };
   };
 
-  const handleReset = async () => {
-    try {
-      await fetch(`${API_BASE}/reset`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: currentUsername })
-      });
-      setEntries([]);
-      setMemories([]);
-      setShowMemoriesModal(false);
-      diaryAudio.playInkSink();
-    } catch (err) {
-      console.warn("Reset error:", err);
-      setEntries([]);
-      setMemories([]);
-      setShowMemoriesModal(false);
-    }
-  };
-
   if (!user) {
     return <LoginPage onLogin={handleLogin} />;
   }
@@ -181,14 +160,6 @@ export default function App() {
           />
         )}
       </div>
-
-      {showMemoriesModal && (
-        <MemoryModal
-          memories={memories}
-          onClose={() => setShowMemoriesModal(false)}
-          onReset={handleReset}
-        />
-      )}
 
       {showSettings && (
         <div className="settings-overlay" onClick={() => setShowSettings(false)}>

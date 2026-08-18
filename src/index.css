@@ -67,7 +67,6 @@
   --ink-shine: rgba(30, 45, 80, 0.7);
   --ink-riddle: #19142e;
   --ink-riddle-glow: rgba(75, 45, 120, 0.3);
-  --horcrux-red: #7c0a0a;
   --font-title: 'Cinzel Decorative', serif;
   --font-body: 'IM Fell English', serif;
   --font-ink: 'Marck Script', cursive;
@@ -79,6 +78,12 @@
   margin: 0;
   padding: 0;
   user-select: none;
+}
+
+#root {
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 body {
@@ -106,6 +111,35 @@ body {
   background: var(--gold-accent);
   border-radius: 3px;
 }
+
+/* ----------------------------------------------------
+   SKELETON LOADING ANIMATION
+   ---------------------------------------------------- */
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+}
+
+.skeleton-line {
+  height: 14px;
+  border-radius: 4px;
+  background: rgba(139, 107, 27, 0.25);
+  animation: skeletonPulse 1.8s ease-in-out infinite;
+  margin-bottom: 10px;
+}
+
+.skeleton-line.short { width: 40%; }
+.skeleton-line.medium { width: 65%; }
+.skeleton-line.long { width: 90%; }
+
+.skeleton-entry {
+  padding: 12px 0;
+  border-bottom: 1px dashed rgba(139, 107, 27, 0.15);
+}
+
+.skeleton-entry .skeleton-line.user { width: 55%; height: 12px; margin-bottom: 8px; }
+.skeleton-entry .skeleton-line.diary { width: 80%; height: 12px; margin-bottom: 6px; }
+.skeleton-entry .skeleton-line.date { width: 30%; height: 10px; margin-bottom: 0; }
 
 /* ----------------------------------------------------
    BOOK COVER CONTAINER & FLIP ANIMATION
@@ -204,24 +238,6 @@ body {
   margin-top: 12px;
 }
 
-/* Latch Clasp */
-.book-clasp {
-  width: 40px;
-  height: 60px;
-  background: linear-gradient(180deg, #d4af37 0%, #8b6b1b 100%);
-  border-radius: 4px;
-  box-shadow: 0 4px 10px rgba(10, 8, 12, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  margin-bottom: 40px;
-  transition: transform 0.2s ease;
-}
-
-.book-clasp:hover {
-  transform: scale(1.1);
-}
 
 /* ----------------------------------------------------
    OPEN PARCHMENT TWO-PAGE SPREAD
@@ -294,8 +310,8 @@ body {
   justify-content: space-between;
   align-items: center;
   border-bottom: 2px dashed rgba(139, 107, 27, 0.3);
-  padding-bottom: 12px;
-  margin-bottom: 20px;
+  padding-bottom: 10px;
+  margin-bottom: 14px;
 }
 
 .date-stamp {
@@ -453,7 +469,7 @@ body {
   display: flex;
   gap: 12px;
   align-items: center;
-  margin-top: 16px;
+  margin-top: 8px;
 }
 
 .btn-quill {
@@ -532,29 +548,29 @@ body {
 
 .history-entry-item {
   border-bottom: 1px dashed rgba(139, 107, 27, 0.3);
-  padding: 12px 0;
+  padding: 8px 0;
 }
 
 .history-user-text {
   font-family: var(--font-ink);
-  font-size: 1.4rem;
+  font-size: 1.15rem;
   color: #4a3e3d;
   font-style: italic;
 }
 
 .history-riddle-text {
   font-family: var(--font-ink);
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   color: var(--ink-riddle);
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .history-entry-date {
   font-family: var(--font-body);
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: rgba(139, 107, 27, 0.5);
   font-style: italic;
-  margin-top: 4px;
+  margin-top: 2px;
   text-align: right;
 }
 
@@ -758,10 +774,6 @@ body {
   }
 
   .book-container {
-    transition: none;
-  }
-
-  .book-clasp {
     transition: none;
   }
 

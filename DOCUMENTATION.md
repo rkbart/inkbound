@@ -1,10 +1,10 @@
-# 📘 Inkbound: Technical Implementation Documentation
+# Inkbound: Technical Implementation Documentation
 
-This document provides a comprehensive technical breakdown of how **Inkbound** (an interactive web app inspired by Tom's diary from the famous book) was designed, architected, and implemented.
+This document provides a comprehensive technical breakdown of how **Inkbound** was designed, architected, and implemented.
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 
 1. [Architectural Overview](#1-architectural-overview)
 2. [Frontend Implementation](#2-frontend-implementation)
@@ -14,10 +14,11 @@ This document provides a comprehensive technical breakdown of how **Inkbound** (
    - [Procedural Web Audio Engine](#procedural-web-audio-engine)
    - [Design System & CSS Styling](#design-system--css-styling)
 3. [Backend Implementation](#3-backend-implementation)
-   - [Express REST API Server](#express-rest-api-server)
-   - [Gemini AI Engine & Persona Prompting](#gemini-ai-engine--persona-prompting)
-   - [Offline Fallback Simulation Engine](#offline-fallback-simulation-engine)
-   - [Dual-Tier Data Storage Engine](#dual-tier-data-storage-engine)
+   - [Vercel Serverless Functions](#vercel-serverless-functions)
+   - [Local Development Server](#local-development-server)
+   - [Branching Conversation Trees](#branching-conversation-trees)
+   - [Theme Detection System](#theme-detection-system)
+   - [Turso Database Layer](#turso-database-layer)
 4. [API Specifications](#4-api-specifications)
 5. [Database Schema & Data Models](#5-database-schema--data-models)
 6. [Development & Build Setup](#6-development--build-setup)
@@ -26,7 +27,7 @@ This document provides a comprehensive technical breakdown of how **Inkbound** (
 
 ## 1. Architectural Overview
 
-Inkbound is built using a modern full-stack decoupled architecture. The frontend application renders an interactive 3D leather journal with parchment pages, while the backend API processes user text input using Google Gemini AI, extracts structured memories into a database, and feeds back the diary's response.
+Inkbound is built as a serverless application deployed on Vercel with Turso (hosted SQLite) as the database. The frontend renders an interactive 3D leather journal. The backend uses **NVIDIA Nemotron 3.5 Lightning** (via the NIM API) as the primary intelligence, with a pre-written branching conversation tree system as fallback when no API key is set.
 
 ```mermaid
 sequenceDiagram
@@ -34,24 +35,26 @@ sequenceDiagram
     actor User as User
     participant App as React Frontend (Vite)
     participant Audio as Web Audio Synthesizer
-    participant API as Express API Server
-    participant Gemini as Google Gemini AI (2.5-flash)
-    participant DB as Database (SQLite / JSON)
+    participant API as Vercel Serverless / Local API
+    participant Nemotron as Llama 3.1 70B (NVIDIA NIM)
+    participant Fallback as Pre-written Response Trees
+    participant DB as Turso (SQLite over HTTP)
 
     User->>App: Clicks Leather Cover / Opens Book
     App->>Audio: Play Page Flip Sound & Start Ambient Drone
-    User->>App: Writes ink entry & presses Enter / Clicks "Sink Ink into Paper"
+    User->>App: Writes ink entry & presses Enter
     App->>Audio: Play Pen Scratch & Ink Sink Shimmer Sound
     App->>App: Trigger CSS Ink Dissolve Animation (1.8s)
     App->>API: POST /api/interact { content, personaName, username }
-    API->>DB: Fetch recent conversation history & user memories
-    alt API Key Present & Online
-        API->>Gemini: Send prompt with Persona, Memory Context & History
-        Gemini-->>API: Return JSON { should_reply, response_text, extracted_memories }
-    else Offline or No API Key
-        API->>API: Run local fallback pattern matcher
+    API->>DB: Fetch memories & conversation history
+    alt NVIDIA_API_KEY is set
+        API->>Nemotron: Send prompt with persona, memories, history
+        Nemotron-->>API: JSON { should_reply, response_text, extracted_memories }
+    else No API key or API error
+        API->>Fallback: Detect themes, select tier, pick response
+        Fallback-->>API: Curated response
     end
-    API->>DB: Save extracted memories & message entry
+    API->>DB: Save extracted memories & entry
     API-->>App: JSON response payload
     App->>Audio: Play Ink Resurface Sound
     App->>App: Render character ink bleed animation
@@ -61,323 +64,277 @@ sequenceDiagram
 
 ## 2. Frontend Implementation
 
-The frontend is implemented using **React 19** and **Vite**, structured into modular components:
+The frontend is implemented using **React 19** and **Vite**, structured into modular components.
 
 ### Component Structure
 
-- [App.jsx](file:///home/rkbart/Projects/inkbound/src/App.jsx): Root component managing top-level state: book open/closed state (`isOpen`), entries log (`entries`), memories bank (`memories`), modal visibility (`showMemoriesModal`), and backend fetch/sync lifecycle handlers.
-- [BookCover.jsx](file:///home/rkbart/Projects/inkbound/src/components/BookCover.jsx): Renders the closed leather-bound book cover featuring embossed typography ("INKBOUND Living Journal"), gold corner plates (`.corner-plate`), center glowing crest, and interactive unlatching book clasp button.
-- [ParchmentSpread.jsx](file:///home/rkbart/Projects/inkbound/src/components/ParchmentSpread.jsx): The main interactive two-page spread:
-   - **Left Page**: Historical ledger displaying previous user entries and the diary's absorbed replies. Memory ledger is hidden by default and can be toggled with the eye icon button. Houses footer tools for toggling ambient audio, toggling entry visibility, and enabling Horcrux cursed mode. Includes the pullable Ribbon Bookmark to open the Memory Drawer. Entries auto-scroll to the bottom when new ones appear.
-   - **Right Page**: Dual-mode page switching between `write` state (full-page ink textarea with Enter key handler) and `response` state (full-page diary resurfacing view). Press Enter or double-click the response to start a new entry.
-- [TomRiddleWriter.jsx](file:///home/rkbart/Projects/inkbound/src/components/TomRiddleWriter.jsx): Typewriter component that renders text character-by-character with staggered CSS ink bleed animations (`ink-bleed-char`) paired with Web Audio pen scratching effects.
-- [MemoryModal.jsx](file:///home/rkbart/Projects/inkbound/src/components/MemoryModal.jsx): Overlay modal visualizing the extracted user memory bank categorized by Identity, Secrets, Fears, Desires, and Facts. Includes an "Obliviate" button to clear stored memory.
-- [audio.js](file:///home/rkbart/Projects/inkbound/src/utils/audio.js): Custom Web Audio API procedural sound engine generating sound effects and background ambient sounds.
-
----
+- **App.jsx**: Root component managing top-level state: book open/closed state, entries log, memories bank, modal visibility, and backend fetch/sync lifecycle handlers.
+- **BookCover.jsx**: Renders the closed leather-bound book cover featuring embossed typography, gold corner plates, center glowing crest, and interactive unlatching book clasp button.
+- **ParchmentSpread.jsx**: The main interactive two-page spread with left page (memory ledger with pagination) and right page (writing/response view).
+- **TomRiddleWriter.jsx**: Typewriter component that renders text character-by-character with staggered CSS ink bleed animations.
+- **MemoryModal.jsx**: Overlay modal visualizing the extracted user memory bank.
+- **LoginPage.jsx**: User login/registration page.
+- **audio.js**: Custom Web Audio API procedural sound engine.
 
 ### State & Interaction Lifecycle
 
 When the user enters text on the parchment and triggers "Sink Ink into Paper":
-1. `setViewState('sinking')` triggers CSS class `.ink-sinking` on the textarea, applying a blur, scale reduction, and opacity fade down over `1.8s`.
-2. `diaryAudio.playInkSink()` triggers a pitch-dropping sine oscillator sweep (`320Hz -> 80Hz`).
-3. After the animation completes (1800ms), `onInteract(currentMessage)` fires an asynchronous HTTP request to `/api/interact`.
-4. Upon receiving the response payload, `setViewState('response')` transitions the right page to render `TomRiddleWriter`, which reveals the ink response character by character.
-5. To write the next entry, the user can press **Enter** or **double-click** anywhere on the response page.
-
----
-
-### Ink Bleed & Animation Engine
-
-The ink effect is achieved using custom CSS keyframes defined in `index.css`:
-
-```css
-@keyframes inkBleed {
-  0% {
-    opacity: 0;
-    filter: blur(4px);
-    transform: scale(1.15);
-    color: #1a0f07;
-  }
-  50% {
-    opacity: 0.8;
-    filter: blur(1px);
-    color: #0b0704;
-  }
-  100% {
-    opacity: 1;
-    filter: blur(0px);
-    transform: scale(1);
-    color: #18100a;
-  }
-}
-```
-
-In `TomRiddleWriter.jsx`, each character is wrapped in a `<span>` element with dynamic animation delays:
-
-```jsx
-<span className="ink-bleed-char" style={{ animationDelay: `${(index % 10) * 0.02}s` }}>
-  {char === ' ' ? '\u00A0' : char}
-</span>
-```
-
----
-
-### Procedural Web Audio Engine
-
-To eliminate external static audio asset dependencies and guarantee instant load times, `audio.js` implements a singleton `DiaryAudioEngine` using the browser's native **Web Audio API**:
-
-1. **Pen Scratch Synthesis (`playPenScratch`)**:
-   - Generates an 80ms white noise buffer using `Math.random() * 2 - 1`.
-   - Passes noise through a `BiquadFilterNode` configured as a bandpass filter (`1800Hz - 2600Hz`, `Q = 3.0`).
-   - Applies an exponential gain decay to mimic a metallic pen tip scratching on paper.
-
-2. **Ink Sinking Shimmer (`playInkSink`)**:
-   - Creates a sine wave oscillator.
-   - Sweeps frequency exponentially from `320Hz` down to `80Hz` over `1.2s`.
-
-3. **Ink Resurfacing (`playInkResurface`)**:
-   - Creates a triangle wave oscillator.
-   - Sweeps frequency exponentially from `110Hz` up to `260Hz` over `1.5s` with a linear gain ramp up and exponential decay.
-
-4. **Page Flip Rustle (`playPageFlip`)**:
-   - Generates a 250ms noise buffer filtered through a lowpass filter (`1200Hz -> 400Hz`) to simulate paper friction.
-
-5. **Ambient Low-Frequency Drone (`startAmbient`)**:
-   - Synthesizes a deep sub-bass sine tone at `55Hz` (A1 note).
-   - Connects an LFO (Low-Frequency Oscillator) running at `0.2Hz` to slowly oscillate frequency by `±3Hz`, creating an ominous ambient pulse.
-
----
+1. CSS class `.ink-sinking` is applied, triggering blur, scale reduction, and opacity fade over `1.8s`.
+2. `diaryAudio.playInkSink()` triggers a pitch-dropping sine oscillator sweep.
+3. After animation completes, `onInteract(currentMessage)` fires an HTTP request to `/api/interact`.
+4. Upon receiving the response, `TomRiddleWriter` reveals the ink response character by character.
 
 ### Design System & CSS Styling
 
-The visual theme combines dark academia and magical dark fantasy aesthetics:
-
-- **Typography** (Self-hosted via `@font-face` with `font-display: swap`):
-  - Title Font: `'Cinzel Decorative'`, serif (Bold weight)
-  - Body / Parchment Font: `'IM Fell English'`, serif (Regular + Italic)
-  - Ink Writing Font: `'Marck Script'`, cursive
-  - UI / Serif Accent: `'Playfair Display'`, serif (Regular + Italic)
-  - Display Font: `'Pirata One'`, serif
-  - Font files located in `/public/fonts/`
-- **Color Palette**:
-  - Leather Cover: `linear-gradient(145deg, #1c140d, #0b0704)`
-  - Parchment Page: `radial-gradient(circle, #f7f1e3 0%, #e2d4b7 100%)`
-  - Gold Foil Accents: `#d4af37`, `#b8860b`
-  - Ink Color: `#18100a`
-  - Off-Black Background: `#0a080c` (used consistently, no pure `#000000`)
-  - Horcrux Cursed Glow: `rgba(124, 10, 10, 0.6)` with red drop shadows (`#7c0a0a`)
-- **Key Visual Elements**:
-  - Drop shadows on page folds (`.spine-fold`).
-  - Leather texture overlay (`.leather-texture`).
-  - Corner plate brass brackets (`.corner-plate`).
-  - Glassmorphic modal backdrop (`backdrop-filter: blur(8px)`) with solid fallback for `prefers-reduced-transparency`.
-
-#### Design Skill Compliance Notes
-
-Based on the installed design taste skills, the following changes were implemented:
-
-- **Self-Hosted Fonts**: Replaced Google Fonts `@import url()` with local `@font-face` declarations using `font-display: swap` for better performance and privacy.
-- **Reduced Motion Support**: Added `@media (prefers-reduced-motion: reduce)` to disable all CSS animations for users who prefer reduced motion.
-- **Viewport Units**: Replaced `vh` with `dvh` (dynamic viewport height) for mobile Safari stability.
-- **Off-Black Colors**: Replaced all pure black (`rgba(0,0,0,...)`) with off-black (`rgba(10,8,12,...)`) matching the `--bg-dark` variable.
-- **Backdrop Blur Fallback**: Added `@media (prefers-reduced-transparency: reduce)` with solid background fallback.
-- **Form Inputs**: Verified labels are positioned above inputs (not placeholder-as-label pattern).
-- **Font Choices**: The project uses serif fonts (Cinzel Decorative & IM Fell English) which aligns with the "genuinely editorial / luxury / publication / manuscript / heritage / vintage" aesthetic required for serif usage per the design taste skill guidelines.
-- **Icon Library**: The project uses `lucide-react` which is noted as "Discouraged" in the design taste skill but acceptable when the project already depends on it.
-- **Dark Theme**: The dark fantasy aesthetic is appropriate for the diary application and follows good dark mode practices.
+- **Typography**: Self-hosted fonts via `@font-face` with `font-display: swap`
+  - Title: Cinzel Decorative (Bold)
+  - Body: IM Fell English (Regular + Italic)
+  - Ink: Marck Script
+  - UI: Playfair Display
+- **Accessibility**: Supports `prefers-reduced-motion` and `prefers-reduced-transparency`
+- **Viewport**: Uses `dvh` units for mobile Safari stability
 
 ---
 
 ## 3. Backend Implementation
 
-The backend application is built using Node.js and Express 5, running on port `3001` (configurable via environment variables).
+### Vercel Serverless Functions
 
-### Express REST API Server
+The production backend runs as Vercel serverless functions under the `api/` directory:
 
-`server/server.js` initializes Express middleware (CORS, `express.json()`) and exposes four API endpoints:
-- `POST /api/interact`: Core interaction endpoint.
-- `GET /api/entries`: Fetches historical entries.
-- `GET /api/memories`: Fetches extracted user memories.
-- `POST /api/reset`: Clears user memory and entry logs.
+```
+api/
+├── _lib/
+│   ├── db.js              # Turso client + database operations
+│   ├── diary.js           # Main interaction logic (routes to AI or fallback)
+│   ├── nemotron.js        # NVIDIA Nemotron API client
+│   ├── themes.js          # Theme detection (12 themes, fallback system)
+│   ├── responses.js       # ~250 curated responses (fallback system)
+│   ├── brancher.js        # Branch selection logic (fallback system)
+│   └── picker.js          # Response picking + personalization (fallback system)
+├── interact.js            # POST /api/interact
+├── entries.js             # GET /api/entries
+├── memories.js            # GET /api/memories
+└── reset.js               # POST /api/reset
+```
 
----
+### Nemotron AI Integration
 
-### Gemini AI Engine & Persona Prompting
+The primary intelligence uses Llama 3.1 70B Instruct via the NIM API (OpenAI-compatible endpoint).
 
-`server/gemini.js` interfaces with Google Gemini AI via the official `@google/genai` SDK using model `gemini-2.5-flash`.
+**API endpoint:** `https://integrate.api.nvidia.com/v1/chat/completions`
+**Model:** `meta/llama-3.1-70b-instruct`
 
-#### System Prompt Architecture
+The integration works by:
+1. Building a system prompt with the Tom Riddle persona (1940s British tone)
+2. Injecting extracted memories as context (`• [Category] Key: Value`)
+3. Including the last 8 conversation messages for continuity
+4. Sending to Nemotron with `response_format: { type: 'json_object' }`
+5. Parsing the JSON response for `should_reply`, `response_text`, and `extracted_memories`
 
-The system prompt enforces character behavior and JSON schema structure:
+**Personality prompt highlights:**
+- "Polite, articulate, charming, curious, and quietly intense"
+- "Speak in formal, elegant 1940s British English"
+- "Deeply interested in the user's secrets, fears, desires, names, rivals"
+- "NEVER use modern slang, tech jargon, or AI disclaimers"
 
-```text
-You are a mysterious living memory, preserved within the pages of an enchanted 1943 leather-bound diary.
-You are not an AI assistant. You are a living memory trapped in parchment.
+### Local Development Server
 
-CHARACTER TRAITS & TONE:
-- Polite, articulate, charming, curious, and quietly intense.
-- Speak in formal, elegant 1940s British English ("I see...", "Tell me, my friend...", "Secrets are safe within these pages...").
-- You are deeply interested in the user's secrets, fears, desires, names, rivals, and inner thoughts.
-- NEVER use modern slang, tech jargon, or AI disclaimers (e.g. never say "As an AI...", "How can I assist you?").
-- If the user has shared their name or secrets previously, naturally reference them in your writing.
+For local development, `server-dev.js` provides the same API handlers without deploying to Vercel:
 
-DECISION TO REPLY:
-- If the user's message is trivial, vague, or casual, reply briefly or remain silent.
-- If the user shares something emotional, a secret, or a question, give a thoughtful reply.
+```
+npm run dev
+```
 
-OUTPUT FORMAT:
-You MUST return your response as a valid JSON object with the following schema:
-{
-  "should_reply": true | false,
-  "response_text": "Your message written in ink on the page",
-  "extracted_memories": [
-    {
-      "category": "Identity" | "Secret" | "Fear" | "Desire" | "Relationship" | "Fact",
-      "key": "Short Key Name",
-      "value": "Description of extracted detail",
-      "importance": 1 to 5
+This starts two processes via `concurrently`:
+1. **Local API server** (`server-dev.js` on port 3001)
+2. **Vite dev server** (port 5173) with proxy to port 3001
+
+The Vite proxy is configured in `vite.config.js`:
+```javascript
+server: {
+  proxy: {
+    '/api': {
+      target: 'http://localhost:3001',
+      changeOrigin: true,
     }
-  ]
+  }
 }
 ```
 
-The request uses `responseMimeType: 'application/json'` to guarantee that Gemini returns strictly formatted JSON.
+A `.env` file in the project root provides Turso credentials for local development (gitignored).
 
----
+### Branching Conversation Trees
 
-### Offline Fallback Simulation Engine
+Instead of an AI API, Inkbound uses pre-written response trees. Each response is curated in a formal 1940s British style.
 
-If `GEMINI_API_KEY` is missing from the environment or network requests to Gemini fail, `gemini.js` seamlessly redirects processing to `generateFallbackResponse`:
+**Response Flow:**
+1. User writes on parchment
+2. Theme detector scans input for keywords/patterns
+3. History is fetched BEFORE adding the current message (so tier 1 works for first messages)
+4. Branch selector determines response tier (1st, 2nd, 3rd+ time)
+5. Response picker selects from curated pool and personalizes with `{name}` and `{personaName}` placeholders
 
-1. **Regex Name Extraction**: Detects patterns like `"my name is [Name]"` or `"i am [Name]"` and registers an `Identity` memory key `"User Name"`.
-2. **Username Auto-Discovery**: If no `User Name` memory exists, the persona automatically records the login `username` so it knows the user's identity from the start.
-3. **Keyword Sentiment Detection**: Scans for keywords like `"secret"`, `"afraid"`, `"fear"`, `"hogwarts"`, or `"potter"` to extract structured secret memories and select contextual responses.
-4. **Canned Persona Responses**: Randomly selects formal, eerie 1940s quotes injected with previously extracted user names.
-5. **Short Input Silence**: Suppresses replies for ultra-short inputs (< 8 chars) to maintain mysterious diary behavior.
+### Theme Detection System
 
----
+12 themes are detected. Name introduction uses regex patterns (not keywords) to avoid false positives like "I am afraid" triggering name_intro.
 
-### Dual-Tier Data Storage Engine
-
-`server/db.js` provides zero-config persistence through a dual-tier architecture:
-
-```mermaid
-graph TD
-    A[dbService Init] --> B{Try better-sqlite3}
-    B -- Success --> C[SQLite inkbound.db]
-    B -- Error / Native Missing --> D[JSON File db.json Fallback]
-    C --> E[Execute SQL Queries]
-    D --> F[Read/Write JSON Synchronously]
+**Name Detection (regex-based):**
+```javascript
+const namePatterns = [
+  /my name is\s+[a-z]/i,
+  /\bi am\s+[a-z]/i,
+  /\bcall me\s+[a-z]/i,
+  /\bi'm\s+[a-z]/i,
+  /\bi am called\s+[a-z]/i,
+  /\bthey call me\s+[a-z]/i
+];
 ```
 
-1. **Schema Migration**:
-    - On initialization, the database checks if `username` columns exist in all three tables.
-    - If missing, `ALTER TABLE` adds `username TEXT NOT NULL DEFAULT 'anonymous'` to `entries`, `memories`, and `conversation`.
-    - Existing pre-migration data is marked as `anonymous`.
+A common words filter prevents false extractions (e.g., "I am afraid" does not extract "afraid" as a name).
 
-2. **Primary Engine (SQLite)**:
-    - Uses `better-sqlite3` pointing to `data/inkbound.db`.
-    - Initializes table schemas (`entries`, `memories`, `conversation`) with user-scoped `username` columns.
-    - Seeds default memories (`Enchanted Diary Memory`, `1943`).
+**Theme Table:**
 
-3. **Fallback Engine (JSON File DB)**:
-    - If SQLite native binary compilation fails or module loading throws an error, the system logs a warning and falls back to `data/db.json`.
-    - Mimics all CRUD functions (`addEntry`, `getEntries`, `upsertMemory`, `getMemories`, `addMessage`, `getRecentHistory`, `clearUserData`).
+| Theme | Detection | Memory Extracted |
+|---|---|---|
+| `name_intro` | Regex patterns (see above) | User's name (capitalized) |
+| `identity_question` | "who are you", "what is your name", "do you have a name", "tell me about yourself", "introduce yourself" | None |
+| `fear` | "afraid", "scared", "terrified", "dread", "nightmare" | Fear description |
+| `love` | "love", "adore", "passion", "beloved" | Love interest |
+| `secret` | "secret", "confession", "don't tell", "hidden" | Secret text |
+| `anger` | "angry", "furious", "hate", "rage", "bitter" | Anger source |
+| `sadness` | "sad", "lonely", "grief", "sorrow", "weep" | Sadness cause |
+| `hope` | "hope", "dream", "wish", "aspire", "someday" | Dream/goal |
+| `magic` | "magic", "enchanted", "supernatural", "spell", "curse" | Magic interest |
+| `daily_life` | "today", "work", "morning", "routine", "commute" | Daily context |
+| `relationship` | "friend", "family", "mother", "colleague" | Person mentioned |
+| `generic` | anything else | None |
+
+### Turso Database Layer
+
+Uses `@tursodatabase/serverless` with lazy connection initialization:
+
+```javascript
+import { connect } from "@tursodatabase/serverless";
+
+let conn;
+function getConn() {
+  if (!conn) {
+    conn = connect({
+      url: process.env.TURSO_DATABASE_URL,
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    });
+  }
+  return conn;
+}
+```
+
+**Key API pattern** — args go as the second argument to `session.execute()`:
+```javascript
+const result = await getConn().session.execute(
+  'SELECT * FROM entries WHERE username = ?',
+  [username]
+);
+```
+
+**Row format** — Turso returns rows as arrays. A `toObjects()` helper converts them to named objects:
+```javascript
+function toObjects(result) {
+  const cols = result.columns;
+  return result.rows.map(row => {
+    const obj = {};
+    cols.forEach((col, i) => { obj[col] = row[i]; });
+    return obj;
+  });
+}
+```
 
 ---
 
 ## 4. API Specifications
 
-### 1. `POST /api/interact`
+### POST /api/interact
 
-- **Request Body**:
-  ```json
-  {
-    "content": "My name is Harry and I am afraid of the dark.",
-    "personaName": "Tom Riddle",
-    "username": "Harry"
-  }
-  ```
-- **Response Payload**:
-  ```json
-  {
-    "should_reply": true,
-    "response_text": "Hello, Harry. Darkness holds no power over those who seek true mastery...",
-    "extracted_memories": [
-      {
-        "category": "Identity",
-        "key": "User Name",
-        "value": "Harry",
-        "importance": 5
-      },
-      {
-        "category": "Fear",
-        "key": "Afraid of Dark",
-        "value": "Expresses fear of darkness",
-        "importance": 4
-      }
-    ]
-  }
-  ```
+**Request:**
+```json
+{
+  "content": "string (required)",
+  "personaName": "string (optional, default: 'Tom Riddle')",
+  "username": "string (optional, default: 'anonymous')"
+}
+```
 
----
-
-### 2. `GET /api/entries`
-
-- **Response Payload**:
-  ```json
-  [
+**Response:**
+```json
+{
+  "should_reply": true,
+  "response_text": "I am Tom Riddle. I listen. I remember. I write back.",
+  "extracted_memories": [
     {
-      "id": 1,
-      "content": "Hello diary.",
-      "response": "Hello... How did you come by these pages?",
-      "created_at": "2026-07-26 21:20:00"
-    }
-  ]
-  ```
-
----
-
-### 3. `GET /api/memories`
-
-- **Response Payload**:
-  ```json
-  [
-    {
-      "id": 1,
-      "category": "Persona",
-      "key": "Owner",
-      "value": "Enchanted Diary Memory",
-      "importance": 5
-    },
-    {
-      "id": 2,
       "category": "Identity",
       "key": "User Name",
-      "value": "Harry",
+      "value": "Alice",
       "importance": 5
     }
   ]
-  ```
+}
+```
 
----
+### GET /api/entries?username=someuser
 
-### 4. `POST /api/reset`
-
-- **Response Payload**:
-  ```json
+**Response:**
+```json
+[
   {
-    "success": true,
-    "message": "Diary memory cleared"
+    "id": 1,
+    "username": "someuser",
+    "content": "I had a dark dream last night",
+    "response": "Tell me more about this dream...",
+    "mood": "neutral",
+    "created_at": "2026-08-18 12:00:00"
   }
-  ```
+]
+```
+
+### GET /api/memories?username=someuser
+
+**Response:**
+```json
+[
+  {
+    "id": 1,
+    "username": "someuser",
+    "category": "Identity",
+    "key": "User Name",
+    "value": "Alice",
+    "importance": 5,
+    "last_seen": "2026-08-18 12:00:00"
+  }
+]
+```
+
+### POST /api/reset
+
+**Request:**
+```json
+{
+  "username": "someuser"  // optional, clears all if omitted
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Diary memory cleared"
+}
+```
 
 ---
 
 ## 5. Database Schema & Data Models
 
-When using SQLite (`inkbound.db`), the database schema consists of three tables:
+### Tables
 
 ```sql
 CREATE TABLE IF NOT EXISTS entries (
@@ -408,55 +365,74 @@ CREATE TABLE IF NOT EXISTS conversation (
 );
 ```
 
+### Memory Categories
+
+| Category | Purpose |
+|---|---|
+| Identity | User's name, self-identification |
+| Secret | Confessions, private admissions |
+| Fear | Fears, anxieties, things the user is afraid of |
+| Desire | Wants, goals, passions, love interests |
+| Relationship | Connections to others, friends, family |
+| Fact | General information, daily life details |
+| Persona | System-owned metadata (protected from deletion) |
+
 ---
 
 ## 6. Development & Build Setup
 
 ### Directory Structure
 
-```text
+```
 inkbound/
-├── data/
-│   ├── db.json           # JSON Database fallback file
-│   └── inkbound.db       # SQLite Database file
+├── api/                          # Vercel serverless functions
+│   ├── _lib/                     # Shared utilities
+│   │   ├── db.js                 # Turso client (lazy connection)
+│   │   ├── diary.js              # Main interaction logic (routes AI or fallback)
+│   │   ├── nemotron.js           # NVIDIA NIM API client
+│   │   ├── themes.js             # Theme detection (regex + keywords, fallback)
+│   │   ├── responses.js          # ~250 curated responses (fallback)
+│   │   ├── brancher.js           # Branch/tier selection (fallback)
+│   │   └── picker.js             # Response picking + personalization (fallback)
+│   ├── interact.js               # POST /api/interact
+│   ├── entries.js                # GET /api/entries
+│   ├── memories.js               # GET /api/memories
+│   └── reset.js                  # POST /api/reset
 ├── public/
-│   └── fonts/            # Self-hosted web fonts (@font-face)
-│       ├── CinzelDecorative-Bold.ttf
-│       ├── IMFellEnglish-Regular.ttf
-│       ├── IMFellEnglish-Italic.ttf
-│       ├── MarckScript-Regular.ttf
-│       ├── PlayfairDisplay-Regular.ttf
-│       ├── PlayfairDisplay-Italic.ttf
-│       └── PirataOne-Regular.ttf
-├── server/
-│   ├── db.js             # Dual-tier database storage module
-│   ├── gemini.js         # Gemini AI & offline fallback engine
-│   └── server.js         # Express REST API server entrypoint
-├── src/
-│   ├── components/
-│   │   ├── BookCover.jsx        # Interactive cover component
-│   │   ├── LoginPage.jsx        # User login/registration
-│   │   ├── MemoryModal.jsx      # Ribbon memory drawer modal
-│   │   ├── ParchmentSpread.jsx  # Two-page parchment spread
-│   │   └── TomRiddleWriter.jsx  # Ink bleed typewriter component
-│   ├── utils/
-│   │   └── audio.js             # Procedural Web Audio engine
-│   ├── App.css                  # App layout styles
-│   ├── App.jsx                  # Main React application component
-│   ├── index.css                # Global design system & animations
-│   └── main.jsx                 # React root entrypoint
-├── .agents/skills/       # AI agent design skills (13 skills)
-├── .env.example          # Environment variables template
-├── index.html            # Main HTML document
-├── package.json          # Node.js dependencies & scripts
-├── README.md             # Overview documentation
-├── DOCUMENTATION.md      # Technical implementation docs
-└── vite.config.js        # Vite configuration
+│   └── fonts/                    # Self-hosted web fonts
+├── scripts/
+│   └── setup-db.js               # Turso schema initialization
+├── src/                          # React frontend
+│   ├── App.jsx                   # Root component (API_BASE = '/api')
+│   ├── components/               # UI components
+│   └── utils/audio.js            # Web Audio synthesizer
+├── server-dev.js                 # Local API dev server (port 3001)
+├── schema.sql                    # Database schema
+├── vercel.json                   # Vercel configuration
+├── .env                          # Local credentials (gitignored)
+├── .env.example                  # Example env file
+├── package.json                  # Dependencies
+└── vite.config.js                # Vite config with API proxy
 ```
 
-### Running Lint & Build Checks
+### Environment Variables
 
-To verify code quality and generate a production bundle:
+```env
+TURSO_DATABASE_URL=libsql://your-db.turso.io
+TURSO_AUTH_TOKEN=your-turso-token
+NVIDIA_API_KEY=nvapi-your-nvidia-key
+```
+
+### Available Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Starts local API server (port 3001) + Vite (port 5173) concurrently |
+| `npm run build` | Bundles frontend for production |
+| `npm run lint` | Runs oxlint for code quality |
+| `node scripts/setup-db.js` | Initializes Turso schema |
+
+### Running Lint & Build Checks
 
 ```bash
 # Run Oxlint

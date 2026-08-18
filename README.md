@@ -1,121 +1,126 @@
-# ✒️ Inkbound: Living Enchanted Diary
+# Inkbound: Living Enchanted Diary
 
 > *"Secrets are safe within these pages..."*
 
-**Inkbound** is an immersive, dark fantasy interactive web application inspired by Tom's diary from the famous book. Built with React 19, Vite, Express, and Google Gemini AI, users can write thoughts onto aged parchment pages with ink. The words physically dissolve into the paper fibers, after which the living memory within the diary reads your entry, extracts personal memories and secrets, and writes back on the page in resurfacing ink.
+**Inkbound** is an immersive, dark fantasy interactive web application. Users write thoughts onto aged parchment pages with ink. The words physically dissolve into the paper fibers, after which a living memory within the diary reads your entry, extracts personal memories and secrets, and writes back on the page in resurfacing ink.
 
 ---
 
-## ✨ Features
+## Features
 
-- **📖 Interactive Antique Journal**: Realistically styled leather-bound diary with gold-embossed lettering, brass corner plates, spine shadows, and a ribbon bookmark.
-- **👁️ Toggle Memory Visibility**: Eye icon button to hide or show the parchment memory ledger. Entries auto-scroll to the bottom when new ones appear.
-- **✒️ Magic Ink Dissolve & Bleed Animation**: User input smoothly fades into parchment fibers before the diary's handwriting resurfaces character-by-character.
-- **🧠 LLM Persona & Memory Bank**: Powered by Google's `gemini-2.5-flash` model (`@google/genai`), tuned to an articulate, curious, and eerie 1940s living memory persona. Automatically knows the user's name and extracts personal traits, secrets, names, and fears into a per-user persistent memory bank.
-- **⚡ Dual Storage Engine (SQLite + JSON Fallback)**: Uses `better-sqlite3` for fast local database persistence with user-scoped data isolation. Automatic zero-config fallback to a JSON database file (`data/db.json`) if SQLite native binaries are unavailable.
-- **🔊 Procedural Web Audio Synthesizer**: Zero-asset audio engine using the Web Audio API to generate realistic pen scratches, paper flip rustles, magic ink dissolve shimmers, and deep ambient atmospheric drones.
-- **💀 Horcrux Cursed Mode & Ribbon Drawer**: Toggle dark cursed visual effects, inspect absorbed memories in the Ribbon Drawer, or perform the "Obliviate" memory wipe.
-- **🛡️ Offline Fallback Simulation**: Includes an offline pattern-matching engine that provides interactive responses even without an active internet connection or API key.
+- **AI-Powered Diary Character**: Powered by Llama 3.1 70B Instruct via NVIDIA NIM API, the diary understands context, remembers your secrets, and responds in a formal 1940s British voice. Falls back to 250+ pre-written responses when no API key is set.
+- **Interactive Antique Journal**: Realistically styled leather-bound diary with gold-embossed lettering, brass corner plates, and spine shadows.
+- **Toggle Memory Visibility**: Eye icon button to hide or show the parchment memory ledger. Entries auto-scroll to the bottom when new ones appear.
+- **Magic Ink Dissolve & Bleed Animation**: User input smoothly fades into parchment fibers before the diary's handwriting resurfaces character-by-character.
+- **Memory Extraction & Personalization**: Automatically detects the user's name, secrets, fears, desires, and relationships. Weaves them into future responses for a personalized experience.
+- **Procedural Web Audio Synthesizer**: Zero-asset audio engine using the Web Audio API to generate realistic pen scratches, paper flip rustles, magic ink dissolve shimmers, and deep ambient atmospheric drones.
+- **User Authentication**: Username/password sign-in with persistent sessions via localStorage.
+- **Offline Fallback**: Works without an API key using a built-in branching conversation tree system with ~250 curated responses.
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Frontend**: React 19, Vite, Lucide Icons, Web Audio API, Vanilla CSS (Custom Design System with self-hosted fonts: `Cinzel Decorative`, `IM Fell English`, `Marck Script`, `Playfair Display`)
-- **Backend**: Node.js, Express 5, CORS, Dotenv
-- **AI Integration**: `@google/genai` (Google Gemini AI SDK - `gemini-2.5-flash`)
-- **Database**: `better-sqlite3` with user-scoped data isolation and automated fallback to JSON file storage
+- **Backend**: Vercel Serverless Functions (Node.js) + local dev server
+- **AI**: Llama 3.1 70B Instruct via NVIDIA NIM API (OpenAI-compatible)
+- **Database**: Turso (hosted SQLite via HTTP) with `@tursodatabase/serverless`
+- **Fallback**: Pre-written branching conversation trees with 250+ curated responses
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Prerequisites
 - **Node.js**: v18.0.0 or higher
 - **npm**: v9.0.0 or higher
+- **Turso account**: Free tier at https://turso.tech
+- **NVIDIA API key**: Free at https://build.nvidia.com (no credit card required)
 
 ### 2. Installation
-Clone the repository and install dependencies:
 ```bash
 git clone https://github.com/your-username/inkbound.git
 cd inkbound
 npm install
 ```
 
-### 3. Environment Setup
-Copy `.env.example` to create your `.env` file:
-```bash
-cp .env.example .env
-```
-Add your Google Gemini API Key in `.env`:
-```env
-PORT=3001
-GEMINI_API_KEY=your_gemini_api_key_here
-```
-*(Note: If no API key is provided, Inkbound automatically operates using its built-in local offline simulation engine).*
+### 3. Get Your API Keys
 
-### 4. Running the Application
-Start both the backend server and frontend development server concurrently:
+**NVIDIA API key** (for AI responses):
+1. Sign up at https://build.nvidia.com (free, no credit card)
+2. Click "Get API Key" on any model card
+3. Copy your key (starts with `nvapi-`)
+
+**Turso database** (for persistent storage):
+```bash
+# Install Turso CLI (optional)
+curl -sSfL https://get.tur.so/install.sh | bash
+
+# Create database and get credentials
+turso db create inkbound
+turso db show inkbound --http-url    # TURSO_DATABASE_URL
+turso db tokens create inkbound     # TURSO_AUTH_TOKEN
+
+# Initialize schema
+export TURSO_DATABASE_URL="libsql://..."
+export TURSO_AUTH_TOKEN="..."
+node scripts/setup-db.js
+```
+
+### 4. Local Development
+Create a `.env` file in the project root:
+```env
+TURSO_DATABASE_URL=libsql://your-db.turso.io
+TURSO_AUTH_TOKEN=your-turso-token
+NVIDIA_API_KEY=nvapi-your-nvidia-key
+```
+
+Start the dev server:
 ```bash
 npm run dev
 ```
-Open your browser and navigate to `http://localhost:5173`.
+Open `http://localhost:5173`. The local API server runs on port 3001.
+
+### 5. Vercel Deployment
+```bash
+npm i -g vercel
+vercel env add TURSO_DATABASE_URL
+vercel env add TURSO_AUTH_TOKEN
+vercel env add NVIDIA_API_KEY
+vercel --prod
+```
 
 ---
 
-## 📜 Available Scripts
+## Available Scripts
 
 | Command | Description |
 | :--- | :--- |
-| `npm run dev` | Runs Express backend API (`:3001`) and Vite frontend (`:5173`) concurrently. |
-| `npm run server` | Starts only the Node.js Express backend server. |
-| `npm run client` | Starts only the Vite frontend dev server. |
-| `npm run build` | Bundles the React frontend for production distribution into `/dist`. |
-| `npm run lint` | Runs `oxlint` to perform code linting and syntax checks. |
-| `npm run preview` | Previews the production build locally. |
+| `npm run dev` | Starts local API server (port 3001) and Vite (port 5173) concurrently |
+| `npm run build` | Bundles the React frontend for production |
+| `npm run lint` | Runs `oxlint` for code quality |
+| `node scripts/setup-db.js` | Initializes the Turso database schema |
 
 ---
 
-## 📚 Technical Documentation
+## How It Works
 
-For an in-depth explanation of system architecture, data schemas, Web Audio API sound synthesis, Gemini prompt design, and implementation details, please read [DOCUMENTATION.md](file:///home/rkbart/Projects/inkbound/DOCUMENTATION.md).
-
----
-
-## 🛠️ AI Skills & Development Guidelines
-
-This project has been configured with AI agent skills to enhance code quality and development practices:
-
-### Karpathy Guidelines
-Behavioral guidelines to reduce common LLM coding mistakes, derived from Andrej Karpathy's observations on LLM coding pitfalls. Located at `~/.opencode/skills/andrej-karpathy-skills/`.
-
-Key principles:
-- **Think Before Coding**: State assumptions explicitly, surface tradeoffs
-- **Simplicity First**: Minimum code that solves the problem, nothing speculative
-- **Surgical Changes**: Touch only what you must, clean up only your own mess
-- **Goal-Driven Execution**: Define success criteria, loop until verified
-
-### Design Taste Skills
-Anti-slop frontend design skills for landing pages, portfolios, and redesigns. Located at `.agents/skills/`.
-
-Key skills include:
-- `design-taste-frontend`: Anti-slop frontend skill for landing pages and redesigns
-- `high-end-visual-design`: Premium visual design patterns
-- `minimalist-ui`: Clean, minimal interface design
-- `industrial-brutalist-ui`: Raw, industrial aesthetic patterns
-- `brandkit`: Brand kit image generation skill
-- `image-to-code`: Image-to-code conversion workflows
-- And 7 more specialized design skills
-
-### Usage
-These skills are automatically available to AI coding agents working on this project. They provide guidelines for:
-- Code quality and best practices
-- UI/UX design patterns
-- Anti-slop design techniques
-- Performance and accessibility guardrails
+1. User writes on the parchment and presses Enter
+2. The ink dissolves into the paper with a visual animation
+3. The entry is sent to the backend along with conversation history and extracted memories
+4. **With API key**: Llama 3.1 70B Instruct understands the context and generates an intelligent, personalized response in the diary's 1940s British voice
+5. **Without API key**: The pre-written branching conversation tree system selects a themed response
+6. The response resurfaces character-by-character with ink bleed animations
+7. Memories are extracted and persisted for future personalization
 
 ---
 
-## 📄 License
+## Technical Documentation
+
+For an in-depth explanation of system architecture, data schemas, and implementation details, please read [DOCUMENTATION.md](DOCUMENTATION.md).
+
+---
+
+## License
 
 This project is open-source under the MIT License.
