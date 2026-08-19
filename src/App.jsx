@@ -13,18 +13,21 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState(null);
-  const [personaName, setPersonaName] = useState('Tom Riddle');
+  const [personaName, setPersonaName] = useState('Tom');
 
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem('inkbound_user') || 'null');
     if (storedUser) {
       setUser(storedUser);
-      const storedPersona = localStorage.getItem(`inkbound_persona_${storedUser.username}`);
-      if (storedPersona) {
-        setPersonaName(storedPersona);
-      }
     }
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      const storedPersona = localStorage.getItem(`inkbound_persona_${user.username}`);
+      setPersonaName(storedPersona || 'Tom');
+    }
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -36,12 +39,6 @@ export default function App() {
   const handleLogin = (userData) => {
     setUser(userData);
     setIsOpen(true);
-    const storedPersona = localStorage.getItem(`inkbound_persona_${userData.username}`);
-    if (storedPersona) {
-      setPersonaName(storedPersona);
-    } else {
-      setPersonaName('Tom Riddle');
-    }
     diaryAudio.playPageFlip();
     diaryAudio.startAmbient();
   };
@@ -51,7 +48,7 @@ export default function App() {
     setUser(null);
     setIsOpen(false);
     setShowSettings(false);
-    setPersonaName('Tom Riddle');
+    setPersonaName('Tom');
   };
 
   const handleSavePersona = (name) => {
