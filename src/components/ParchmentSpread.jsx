@@ -21,6 +21,7 @@ export default function ParchmentSpread({
   const [currentPage, setCurrentPage] = useState(0);
   const [responseViewIndex, setResponseViewIndex] = useState(-1);
   const [showSkeleton, setShowSkeleton] = useState(false);
+  const [mobileTab, setMobileTab] = useState('write');
   const entriesPerPage = 3;
   const textareaRef = useRef(null);
 
@@ -134,7 +135,25 @@ export default function ParchmentSpread({
     <div className="parchment-spread">
       <div className="spine-fold" />
 
-      <div className="page-left">
+      <div className="mobile-tabs">
+        <button
+          className={`mobile-tab ${mobileTab === 'memory' ? 'active' : ''}`}
+          onClick={() => setMobileTab('memory')}
+        >
+          Memory ({entries.length})
+        </button>
+        <button
+          className={`mobile-tab ${mobileTab === 'write' ? 'active' : ''}`}
+          onClick={() => setMobileTab('write')}
+        >
+          Write
+        </button>
+        <button className="btn-icon mobile-tab-settings" onClick={() => setShowSettings(true)} title="Settings">
+          <Settings size={16} />
+        </button>
+      </div>
+
+      <div className={`page-left ${mobileTab === 'memory' ? 'mobile-active' : ''}`}>
         <div className="page-header">
           <span className="date-stamp">Parchment Memory ({entries.length})</span>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -212,7 +231,7 @@ export default function ParchmentSpread({
         )}
       </div>
 
-      <div className="page-right">
+      <div className={`page-right ${mobileTab === 'write' ? 'mobile-active' : ''}`}>
         <div className="page-header">
           <span className="date-stamp">{currentDateStr}</span>
         </div>
