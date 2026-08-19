@@ -70,10 +70,10 @@ The frontend is implemented using **React 19** and **Vite**, structured into mod
 
 - **App.jsx**: Root component managing top-level state: book open/closed state, entries log, memories bank, modal visibility, and backend fetch/sync lifecycle handlers.
 - **BookCover.jsx**: Renders the closed leather-bound book cover featuring embossed typography, gold corner plates, and center glowing crest.
-- **ParchmentSpread.jsx**: The main interactive two-page spread with left page (memory ledger with pagination) and right page (writing/response view).
+- **ParchmentSpread.jsx**: The main interactive two-page spread with left page (memory ledger with pagination) and right page (writing/response view). On mobile, displays as a tabbed single-page view with Memory/Write tabs.
 - **TomRiddleWriter.jsx**: Typewriter component that renders text character-by-character with staggered CSS ink bleed animations.
 - **MemoryModal.jsx**: Overlay modal visualizing the extracted user memory bank.
-- **LoginPage.jsx**: User login/registration page.
+- **LoginPage.jsx**: Name-based identity entry. Users type their name to access their personal diary. No password or registration required.
 - **audio.js**: Custom Web Audio API procedural sound engine.
 
 ### State & Interaction Lifecycle
@@ -93,6 +93,7 @@ When the user enters text on the parchment and triggers "Sink Ink into Paper":
   - UI: Playfair Display
 - **Accessibility**: Supports `prefers-reduced-motion` and `prefers-reduced-transparency`
 - **Viewport**: Uses `dvh` units for mobile Safari stability
+- **Responsive Design**: Desktop uses a two-page parchment spread. On mobile (≤768px), a tab bar appears with Memory/Write tabs, switching to a single-page view. Small mobile (≤480px) further scales fonts and spacing. Book cover uses `min()` for responsive sizing. Touch targets are enlarged on mobile.
 
 ---
 
@@ -275,7 +276,7 @@ function toObjects(result) {
 ```json
 {
   "content": "string (required)",
-  "personaName": "string (optional, default: 'Tom Riddle')",
+  "personaName": "string (optional, default: 'Tom')",
   "username": "string (optional, default: 'anonymous')"
 }
 ```

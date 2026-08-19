@@ -10,11 +10,12 @@
 
 - **AI-Powered Diary Character**: Powered by Llama 3.1 8B Instruct via NVIDIA NIM API, the diary understands context, remembers your secrets, and responds in a formal 1940s British voice. Falls back to 250+ pre-written responses when no API key is set.
 - **Interactive Antique Journal**: Realistically styled leather-bound diary with gold-embossed lettering, brass corner plates, and spine shadows.
+- **Mobile Responsive**: Tabbed single-page view on mobile devices with responsive font scaling and touch-friendly controls.
 - **Toggle Memory Visibility**: Eye icon button to hide or show the parchment memory ledger. Entries auto-scroll to the bottom when new ones appear.
 - **Magic Ink Dissolve & Bleed Animation**: User input smoothly fades into parchment fibers before the diary's handwriting resurfaces character-by-character.
 - **Memory Extraction & Personalization**: Automatically detects the user's name, secrets, fears, desires, and relationships. Weaves them into future responses for a personalized experience.
 - **Procedural Web Audio Synthesizer**: Zero-asset audio engine using the Web Audio API to generate realistic pen scratches, paper flip rustles, magic ink dissolve shimmers, and deep ambient atmospheric drones.
-- **User Authentication**: Username/password sign-in with persistent sessions via localStorage.
+- **Name-Based Identity**: Simply type your name to access your diary. Each user gets their own persistent entries and persona, stored via localStorage.
 - **Offline Fallback**: Works without an API key using a built-in branching conversation tree system with ~250 curated responses.
 
 ---
@@ -105,14 +106,17 @@ vercel --prod
 
 ## How It Works
 
-1. User writes on the parchment and double-taps to submit
-2. The ink dissolves into the paper with a visual animation
-3. Skeleton loaders appear on both pages while the AI processes
-4. The entry is sent to the backend along with conversation history and extracted memories
-5. **With API key**: Llama 3.1 8B Instruct understands the context and generates an intelligent, personalized response in the diary's 1940s British voice
-6. **Without API key**: The pre-written branching conversation tree system selects a themed response
-7. The response resurfaces character-by-character with ink bleed animations
-8. Memories are extracted and persisted for future personalization
+1. Enter your name to access your personal diary
+2. On desktop, the two-page parchment spread shows memory ledger (left) and writing (right)
+3. On mobile, use the Memory/Write tab bar to switch between views
+4. Write on the parchment and double-tap to submit
+5. The ink dissolves into the paper with a visual animation
+6. Skeleton loaders appear while the AI processes
+7. The entry is sent to the backend along with conversation history and extracted memories
+8. **With API key**: Llama 3.1 8B Instruct understands the context and generates an intelligent, personalized response in the diary's 1940s British voice
+9. **Without API key**: The pre-written branching conversation tree system selects a themed response
+10. The response resurfaces character-by-character with ink bleed animations
+11. Memories are extracted and persisted for future personalization
 
 ---
 
