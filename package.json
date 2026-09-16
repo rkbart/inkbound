@@ -7,6 +7,7 @@
     "dev": "concurrently \"node server-dev.js\" \"vite\"",
     "build": "vite build",
     "lint": "oxlint",
+    "test": "node --test",
     "preview": "vite preview"
   },
   "dependencies": {

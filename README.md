@@ -103,6 +103,7 @@ vercel --prod
 | `npm run dev` | Starts local API server (port 3001) and Vite (port 5173) concurrently |
 | `npm run build` | Bundles the React frontend for production |
 | `npm run lint` | Runs `oxlint` for code quality |
+| `npm test` | Runs the test suite (`node --test`): unit tests always; DB-backed integration tests when Turso credentials exist |
 | `node scripts/setup-db.js` | Initializes the Turso database schema (idempotent; also creates indexes) |
 | `node scripts/list-models.mjs` | Lists the NVIDIA models your API key can see (for choosing a model) |
 
@@ -124,7 +125,27 @@ vercel --prod
 
 ---
 
-## Troubleshooting
+## Testing
+
+The suite uses Node's built-in test runner — no test framework dependency:
+
+```
+tests/
+├── unit/          # Pure functions, always runnable: NDJSON stream parsing,
+│                  # chunkText invariant, the rate limiter (injectable clock),
+│                  # theme detection, response picking, Markdown export
+├── integration/   # The Vercel handlers (api/*.js) against real Turso, under
+│                  # throwaway usernames; self-skips without TURSO_* creds
+└── helpers/       # .env loader + mock req/res for the serverless handlers
+```
+
+The integration tests exercise `api/memories.js`, `api/entries.js` and `api/reset.js` directly — the files that actually run in production, which the dev server bypasses — and clean up every row they create.
+
+### Rate limiting
+
+`POST /api/interact` is the one endpoint that spends money (LLM calls), so it is guarded by a sliding-window limiter with two buckets: `IP + username` (fairness between writers sharing an address) and `IP alone` (the real abuse ceiling, since a client can invent new usernames freely). Exceeding either returns `429` with a `Retry-After` header, which the client relays in character. Defaults: 20/minute per name, 60/minute per IP, configurable via `RATE_LIMIT_PER_MINUTE` and `RATE_LIMIT_IP_PER_MINUTE`. Note the limiter is in-memory and per-instance — on Vercel the effective ceiling is roughly the limit times the number of warm instances; a durable limiter would need shared state (Turso or Redis).
+
+---
 
 ### The diary replies but nothing appears to be written (or it answers too slowly)
 

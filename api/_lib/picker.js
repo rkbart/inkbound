@@ -10,7 +10,13 @@ export function pickSilentResponse() {
   return getRandomSilentResponse();
 }
 
-function personalize(text, memories, personaName) {
+/**
+ * Substitutes the writer's name into a curated response template.
+ *
+ * Exported for tests: it is pure, and the {name} fallback to "stranger" is
+ * behaviour worth pinning down rather than discovering in a reply.
+ */
+export function personalize(text, memories, personaName) {
   const nameMem = memories.find(m => m.key === 'User Name');
   const name = nameMem ? nameMem.value : 'stranger';
 

@@ -40,7 +40,7 @@ const MODEL_CHAIN = [
 // Total wall-clock budget for all attempts combined. Vercel's function limit is
 // 30s, and the DB writes plus the final stream event still have to happen, so
 // the chain stops well short of it. Each attempt gets a share of what remains.
-const MODEL_CHAIN_BUDGET_MS = 24000;
+const MODEL_CHAIN_BUDGET_MS = 20000;
 const NEMOTRON_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
 // The model writes the reply as plain prose between two markers. This lets

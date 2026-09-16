@@ -104,11 +104,16 @@ inkbound/
 ├── index.html                 # Single HTML page; React mounts into #root
 ├── vite.config.js             # Vite + React plugin + /api proxy → :3001
 ├── vercel.json                # Prod: build dist/, treat api/*.js as functions (30s max)
-├── package.json               # Scripts: dev (concurrently), build, lint
+├── package.json               # Scripts: dev (concurrently), build, lint, test
 ├── .env                       # Secrets (gitignored) — see §10
 ├── schema.sql                 # DDL for the 3 tables + unique/lookup indexes
 ├── scripts/setup-db.js        # Applies schema.sql to Turso (idempotent)
 ├── scripts/list-models.mjs    # Lists the models the NVIDIA account can see
+├── tests/                     # node:test suite — `npm test` (zero dependencies)
+│   ├── unit/                  # themes, picker, brancher, chunkText, ratelimit,
+│   │                          # stream display, Markdown builder
+│   ├── integration/           # calls the REAL Vercel handlers; skips without TURSO_*
+│   └── helpers/               # mock req/res factory + .env loader for the DB tests
 ├── server-dev.js              # Local Node API server (port 3001), mirrors api/ routes
 ├── api/                       # === PRODUCTION BACKEND (Vercel functions) ===
 │   ├── interact.js            # POST   /api/interact — conversation endpoint (NDJSON stream)
@@ -125,6 +130,7 @@ inkbound/
 │       ├── responses.js       # ~250 curated responses + silent responses
 │       ├── brancher.js        # Picks response "tier" based on conversation history
 │       ├── picker.js          # Picks a response from a pool, personalizes {name}
+│       ├── ratelimit.js       # Sliding-window limiter for /api/interact (429 + Retry-After)
 │       └── db.js              # Turso client: lazy connect, retry, all SQL queries
 ├── src/                       # === FRONTEND ===
 │   ├── main.jsx               # React 19 bootstrap (StrictMode)
@@ -321,13 +327,13 @@ The same four endpoints exist twice, on purpose:
 
 `vite.config.js` bridges them in dev: any request to `/api` is **proxied** to `http://localhost:3001`, so the frontend always calls the relative path `/api/...` and never needs to know which backend is serving it. `npm run dev` starts both with `concurrently`.
 
-The handlers themselves are deliberately dumb: validate input → call one `_lib` function → wrap in try/catch → JSON response.
+The handlers themselves are deliberately dumb: validate input → enforce the rate limit (on `/api/interact` only) → call one `_lib` function → wrap in try/catch → JSON response.
 
 ### 7.2 The API endpoints
 
 | Endpoint | Method | Body / Query | Returns |
 |---|---|---|---|
-| `/api/interact` | POST | `{ content, personaName?, username? }` — content capped at 4000 chars (over → 400) | **NDJSON stream**: `{"t":"chunk","v":"…"}` events, then `{"t":"done", should_reply, response_text, extracted_memories[]}` |
+| `/api/interact` | POST | `{ content, personaName?, username? }` — content capped at 4000 chars (over → 400) | **NDJSON stream**: `{"t":"chunk","v":"…"}` events, then `{"t":"done", should_reply, response_text, extracted_memories[]}` — or **429 + `Retry-After`** when a writer outpaces `RATE_LIMIT_PER_MINUTE` |
 | `/api/entries` | GET | `?username=` | `[{ id, username, content, response, mood, created_at }]` (oldest first) |
 | `/api/entries` | DELETE | `{ id, username }` (both required → else 400) | `{ success: true, deleted }` — scoped to the username |
 | `/api/memories` | GET | `?username=` | `[{ id, category, key, value, importance, last_seen }]` (importance desc) |
@@ -375,7 +381,7 @@ The handlers themselves are deliberately dumb: validate input → call one `_lib
 Free-tier model IDs on NIM **retire without warning**, and a retired model is not always removed from `GET /v1/models` — so a catalog listing is not proof of service. This project has already outlived two retirements, and `nvidia/llama3-chatqa-1.5-70b` answers a real request with 404 despite being listed. So:
 
 - `MODEL_CHAIN` is tried in order; the first model that produces anything wins.
-- All attempts share a **24 s wall-clock budget** (`MODEL_CHAIN_BUDGET_MS`) to stay inside the function's 30 s `maxDuration`. The primary gets ~60% of the remaining budget, each later model an equal share of what's left, and the loop stops when under 3 s remains — a stalled primary can't starve its own fallbacks.
+- All attempts share a **20 s wall-clock budget** (`MODEL_CHAIN_BUDGET_MS`) to leave the remaining ~10 s of the function's 30 s `maxDuration` for the fallback engine + DB writes. The primary gets ~60% of the remaining budget, each later model an equal share of what's left, and the loop stops when under 3 s remains — a stalled primary can't starve its own fallbacks.
 - A retry happens **only when an attempt produced nothing**. A mid-stream failure returns whatever already arrived, so the writer never sees two replies spliced together.
 - `scripts/list-models.mjs` lists what the account can see. When picking a model, four properties matter (all verified live before switching):
   1. it answers an actual completion with 200;
@@ -413,14 +419,17 @@ A four-module mini-engine that emulates a character with *no AI at all*:
 ```js
 let result = await interactWithNemotronStream(...);   // primary (streams via onDelta)
 if (!result) {
-  result = await fallbackResponse(...);               // graceful degradation (one chunk)
+  result = await fallbackResponse(...);               // graceful degradation
+  if (result.response_text) chunked(result.response_text);
 } else if (!streamed && result.response_text) {
-  writeNdjson(res, { t: 'chunk', v: result.response_text });  // model skipped the markers
+  chunked(result.response_text);                      // model skipped the markers
 }
 writeNdjson(res, { t: 'done', should_reply, response_text, extracted_memories });
 ```
 
-The `else if` is subtle but important: if a model returns prose **without** the `---REPLY---` marker, nothing could be forwarded live, so the reply is delivered as a single chunk instead of being dropped (the writer would otherwise see the "ink sinks quietly" placeholder for a reply that really exists).
+The `else if` is subtle but important: if a model returns prose **without** the `---REPLY---` marker, nothing could be forwarded live, so the reply is delivered in chunks instead of being dropped (the writer would otherwise see the "ink sinks quietly" placeholder for a reply that really exists).
+
+Both non-streaming paths pass the reply through **`chunkText()`** before emitting: a pure, sentence-aware splitter (≈40-char target, hard cap 120, never splits a word) so the offline engine and marker-less models produce the *same* multi-chunk stream shape as the AI path — the frontend needs no special case for either. The one invariant that matters is tested: `chunks.join('') === text`.
 
 `fallbackResponse` mirrors the AI path: save User Name, run `detectThemes`, upsert extracted memories, pick a "silent" response for very short generic messages, else pick from the themed pool — and persist everything exactly like the AI path does.
 
@@ -502,6 +511,8 @@ Memory categories and their meaning:
 | `TURSO_DATABASE_URL` | `api/_lib/db.js`, `server-dev.js`, `scripts/setup-db.js` | Yes (dev server exits without it) |
 | `TURSO_AUTH_TOKEN` | same | Yes |
 | `NVIDIA_API_KEY` | `api/_lib/nemotron.js` | No — omit to run purely on the fallback engine |
+| `RATE_LIMIT_PER_MINUTE` | `api/_lib/ratelimit.js` | No — default **12** requests/min per `IP\|username` on `/api/interact` |
+| `RATE_LIMIT_IP_PER_MINUTE` | same | No — default **30** requests/min per IP regardless of name |
 
 Note: `server-dev.js` hand-loads `.env` (no `dotenv` dependency). Vercel env vars are set separately via `vercel env add`.
 
@@ -510,6 +521,7 @@ Tooling:
 - `vite.config.js` — React plugin + `/api → :3001` dev proxy.
 - `vercel.json` — build `dist/`, register `api/**/*.js` as functions with `maxDuration: 30` (LLM calls can be slow).
 - `.oxlintrc.json` — React + oxc plugins; `rules-of-hooks` is an error (catches hook misuse at lint time).
+- `npm test` — **zero-dependency suite on Node's built-in `node:test`** (Node ≥18): unit tests for every pure module plus integration tests that invoke the real Vercel handlers with a mock `req`/`res`. The DB-backed tests **self-skip** when `TURSO_DATABASE_URL` isn't configured, so `npm test` is meaningful right after cloning.
 - Fonts are self-hosted in `public/fonts/`, so there are no Google Fonts requests (privacy + offline dev).
 - `npm run lint` runs oxlint; `npm run build` produces the production bundle in `dist/`.
 
@@ -520,11 +532,13 @@ Tooling:
 Great next steps if you're learning by doing:
 
 1. **Real auth** — a passphrase per username, or OAuth. Then `username` stops being spoofable.
-2. **Tests** — `themes.js`, `brancher.js`, and `picker.js` are pure functions; they're ideal Vitest candidates (Vitest integrates natively with Vite).
-3. **Streaming replies** — use the LLM's streaming mode and reveal characters as tokens arrive instead of after the full response.
+2. **More tests** — the suite (`tests/`, `npm test`) already covers the pure modules and the real handlers; natural extensions are the NDJSON stream contract (run `server-dev.js` on an ephemeral port and assert on the wire format) and a fixture-based test of `nemotron.js`'s marker parser against recorded model outputs (including marker-less ones).
+
+3. **Durable rate limiting** — `api/_lib/ratelimit.js` is honest about its limit: serverless instances are ephemeral, so its counters are per-instance. Moving the counters to Turso (or Upstash) would make the limit global; this is a nice, small exercise in shared-state design.
+
 4. **Sentiment → mood** — the `entries.mood` column exists but is always `'neutral'`. Have the LLM (or the themes engine) fill it and tint the ledger.
-5. **Fix known rough edges** — ✅ `currentUsername` hoisting in `App.jsx` (now declared with the other state); `MemoryModal` still uses inline styles while everything else uses `index.css`, and remains unwired (the Phase 2 memory-bank UI will address it).
-6. **Server-side pagination/search** — SQL `LIMIT/OFFSET` instead of slicing all entries in the browser.
+
+5. **Remaining rough edges** — `MemoryModal` mixes inline styles with `index.css` classes; `entries.js`/`memories.js` still load every row and paginate in the browser (SQL `LIMIT/OFFSET` would scale further).
 7. **TypeScript** — the API payloads (`should_reply`, `response_text`, `extracted_memories`) are a perfect case for shared types between frontend and backend.
 
 ---

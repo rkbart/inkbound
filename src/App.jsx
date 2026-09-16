@@ -224,6 +224,20 @@ export default function App() {
         setIsLoading(false);
         return data;
       }
+
+      if (res.status === 429) {
+        // Rate limited (see api/_lib/ratelimit.js). Say so in character rather
+        // than silently degrading to the generic fallback reply — the writer
+        // should know to wait a moment instead of thinking the diary broke.
+        const wait = Number(res.headers.get('Retry-After')) || 0;
+        const seconds = wait > 0 ? wait : 60;
+        setIsLoading(false);
+        return {
+          should_reply: true,
+          response_text: `The ink will not flow so quickly, my friend. The pages tire, as all things must. Return to me in about ${seconds} second${seconds === 1 ? '' : 's'} and we shall continue.`,
+          extracted_memories: []
+        };
+      }
     } catch (err) {
       console.warn("API interact failed, fallback local response used:", err);
     }

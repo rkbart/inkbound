@@ -1,4 +1,5 @@
 import { streamDiaryInteraction, MAX_CONTENT_LENGTH } from './_lib/diary.js';
+import { interactLimiter } from './_lib/ratelimit.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -13,6 +14,17 @@ export default async function handler(req, res) {
 
   if (content.length > MAX_CONTENT_LENGTH) {
     return res.status(400).json({ error: `Content exceeds ${MAX_CONTENT_LENGTH} characters` });
+  }
+
+  // Guard the one endpoint that spends money (see _lib/ratelimit.js for the
+  // per-instance caveat). Checked before any DB or LLM work happens.
+  const verdict = interactLimiter.checkInteraction(req, username);
+  if (!verdict.allowed) {
+    res.setHeader('Retry-After', String(Math.ceil(verdict.retryAfterMs / 1000)));
+    return res.status(429).json({
+      error: 'Too many entries in a short time',
+      retryAfterMs: verdict.retryAfterMs
+    });
   }
 
   try {

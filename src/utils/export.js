@@ -1,6 +1,4 @@
-// Builds a Markdown transcript of the diary and triggers a browser download.
-// Runs entirely client-side from the entries already in state.
-export function exportDiaryMarkdown(entries, username) {
+export function buildDiaryMarkdown(entries, username) {
   const stamp = new Date().toLocaleString('en-GB', {
     day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
   });
@@ -29,7 +27,13 @@ export function exportDiaryMarkdown(entries, username) {
     lines.push('');
   }
 
-  const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+  return lines.join('\n');
+}
+
+// Builds a Markdown transcript of the diary and triggers a browser download.
+// Runs entirely client-side from the entries already in state.
+export function exportDiaryMarkdown(entries, username) {
+  const blob = new Blob([buildDiaryMarkdown(entries, username)], { type: 'text/markdown;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;

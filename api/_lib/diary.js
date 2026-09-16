@@ -59,6 +59,43 @@ function writeNdjson(res, obj) {
 }
 
 /**
+ * Splits reply text into word-boundary chunks for delivery.
+ *
+ * Both the fallback engine and a model that ignores the marker contract produce
+ * their reply in one piece. Shipping that as a single chunk would work (the
+ * client paces the reveal itself), but it makes those paths structurally
+ * different from the AI path. Emitting the same multi-chunk shape everywhere
+ * means the client's incremental rendering is exercised on every path, and a
+ * future client could ink per chunk with no server change.
+ *
+ * Invariant, relied on by the client and by tests: joining the chunks
+ * reproduces the input exactly — no character is dropped or duplicated.
+ * A single word longer than maxChars is emitted whole rather than truncated.
+ */
+export function chunkText(text, maxChars = 48) {
+  if (!text) return [];
+  const chunks = [];
+  let current = '';
+  // The capture group keeps the whitespace tokens, so nothing is lost.
+  for (const token of text.split(/(\s+)/)) {
+    if (current && (current + token).length > maxChars) {
+      chunks.push(current);
+      current = token;
+    } else {
+      current += token;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+const streamReply = (res, text) => {
+  for (const piece of chunkText(text)) {
+    writeNdjson(res, { t: 'chunk', v: piece });
+  }
+};
+
+/**
  * Streams one diary interaction to the client as newline-delimited JSON:
  *   {"t":"chunk","v":"<reply text delta>"}   (0..n times, in order)
  *   {"t":"done","should_reply":bool,"extracted_memories":[...]}
@@ -80,13 +117,13 @@ export async function streamDiaryInteraction(res, userMessage, personaName = 'To
     result = await fallbackResponse(userMessage, personaName, username);
     if (result.should_reply && result.response_text) {
       streamed = true;
-      writeNdjson(res, { t: 'chunk', v: result.response_text });
+      streamReply(res, result.response_text);
     }
   } else if (!streamed && result.should_reply && result.response_text) {
     // The model ignored the ---REPLY--- marker, so nothing could be forwarded
     // live. Deliver the reply now instead of dropping it — without this the
     // writer would see the "ink sinks quietly" placeholder for a real reply.
-    writeNdjson(res, { t: 'chunk', v: result.response_text });
+    streamReply(res, result.response_text);
   }
 
   writeNdjson(res, {

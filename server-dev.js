@@ -61,6 +61,17 @@ const server = http.createServer(async (req, res) => {
       if (body.content.length > MAX_CONTENT_LENGTH) {
         res.writeHead(400); res.end(JSON.stringify({ error: `Content exceeds ${MAX_CONTENT_LENGTH} characters` })); return;
       }
+      // Same guard as the Vercel handler, sharing the limiter module.
+      const { interactLimiter } = await import('./api/_lib/ratelimit.js');
+      const verdict = interactLimiter.checkInteraction(req, body.username);
+      if (!verdict.allowed) {
+        res.writeHead(429, {
+          'Content-Type': 'application/json',
+          'Retry-After': String(Math.ceil(verdict.retryAfterMs / 1000))
+        });
+        res.end(JSON.stringify({ error: 'Too many entries in a short time', retryAfterMs: verdict.retryAfterMs }));
+        return;
+      }
       res.writeHead(200, {
         'Content-Type': 'application/x-ndjson; charset=utf-8',
         'Cache-Control': 'no-cache'
