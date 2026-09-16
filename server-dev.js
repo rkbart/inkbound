@@ -40,7 +40,7 @@ async function parseBody(req) {
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,DELETE,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
@@ -53,7 +53,7 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (path === '/api/interact' && req.method === 'POST') {
-      const { interactWithDiary, MAX_CONTENT_LENGTH } = await import('./api/_lib/diary.js');
+      const { streamDiaryInteraction, MAX_CONTENT_LENGTH } = await import('./api/_lib/diary.js');
       const body = await parseBody(req);
       if (!body.content || typeof body.content !== 'string' || !body.content.trim()) {
         res.writeHead(400); res.end(JSON.stringify({ error: 'Content required' })); return;
@@ -61,21 +61,54 @@ const server = http.createServer(async (req, res) => {
       if (body.content.length > MAX_CONTENT_LENGTH) {
         res.writeHead(400); res.end(JSON.stringify({ error: `Content exceeds ${MAX_CONTENT_LENGTH} characters` })); return;
       }
-      const result = await interactWithDiary(body.content.trim(), body.personaName || 'Tom Riddle', body.username || 'anonymous');
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(result));
+      res.writeHead(200, {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-cache'
+      });
+      res.flushHeaders?.();
+      await streamDiaryInteraction(res, body.content.trim(), body.personaName || 'Tom Riddle', body.username || 'anonymous');
     } else if (path === '/api/entries' && req.method === 'GET') {
       const { dbService } = await import('./api/_lib/db.js');
       const username = url.searchParams.get('username') || 'anonymous';
       const entries = await dbService.getEntries(username);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(entries));
+    } else if (path === '/api/entries' && req.method === 'DELETE') {
+      const { dbService } = await import('./api/_lib/db.js');
+      const body = await parseBody(req);
+      const entryId = Number(body.id);
+      if (!entryId || !body.username) {
+        res.writeHead(400); res.end(JSON.stringify({ error: 'id and username are required' })); return;
+      }
+      const deleted = await dbService.deleteEntry(body.username, entryId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, deleted }));
     } else if (path === '/api/memories' && req.method === 'GET') {
       const { dbService } = await import('./api/_lib/db.js');
       const username = url.searchParams.get('username') || 'anonymous';
       const memories = await dbService.getMemories(username);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(memories));
+    } else if (path === '/api/memories' && req.method === 'DELETE') {
+      const { dbService } = await import('./api/_lib/db.js');
+      const body = await parseBody(req);
+      const memId = Number(body.id);
+      if (!memId || !body.username) {
+        res.writeHead(400); res.end(JSON.stringify({ error: 'id and username are required' })); return;
+      }
+      const deleted = await dbService.deleteMemory(body.username, memId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, deleted }));
+    } else if (path === '/api/memories' && req.method === 'PATCH') {
+      const { dbService } = await import('./api/_lib/db.js');
+      const body = await parseBody(req);
+      const memId = Number(body.id);
+      if (!memId || !body.username || !body.value || typeof body.value !== 'string' || !body.value.trim()) {
+        res.writeHead(400); res.end(JSON.stringify({ error: 'id, username and value are required' })); return;
+      }
+      const updated = await dbService.updateMemory(body.username, memId, { value: body.value.trim().slice(0, 500) });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, updated }));
     } else if (path === '/api/reset' && req.method === 'POST') {
       const { dbService } = await import('./api/_lib/db.js');
       const body = await parseBody(req);
@@ -94,8 +127,13 @@ const server = http.createServer(async (req, res) => {
     }
   } catch (err) {
     console.error('API Error:', err);
-    res.writeHead(500);
-    res.end(JSON.stringify({ error: err.message }));
+    if (!res.headersSent) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ error: err.message }));
+    } else {
+      // A streamed response failed midway — just close it cleanly.
+      try { res.end(); } catch { /* already closed */ }
+    }
   }
 });
 

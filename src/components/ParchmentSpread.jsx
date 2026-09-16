@@ -1,11 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Volume2, VolumeX, Sparkles, Settings, Eye, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Volume2, VolumeX, Sparkles, Settings, Eye, EyeOff, ChevronLeft, ChevronRight, Brain, Trash2, Download } from 'lucide-react';
 import TomRiddleWriter from './TomRiddleWriter';
+import MemoryModal from './MemoryModal';
 import { diaryAudio } from '../utils/audio';
+import { exportDiaryMarkdown } from '../utils/export';
+import { displayFromStream } from '../utils/stream';
 
 export default function ParchmentSpread({
   entries,
+  memories,
+  username,
   onInteract,
+  onDeleteEntry,
+  onDeleteMemory,
+  onUpdateMemory,
   personaName,
   isLoading,
   showSettings,
@@ -22,6 +30,9 @@ export default function ParchmentSpread({
   const [responseViewIndex, setResponseViewIndex] = useState(-1);
   const [showSkeleton, setShowSkeleton] = useState(false);
   const [mobileTab, setMobileTab] = useState('write');
+  const [showMemories, setShowMemories] = useState(false);
+  const [memoryToast, setMemoryToast] = useState(null);
+  const [responseKey, setResponseKey] = useState(0);
   const entriesPerPage = 3;
   const textareaRef = useRef(null);
 
@@ -81,6 +92,7 @@ export default function ParchmentSpread({
     setViewState('sinking');
     setSilentMessage(null);
     setActiveReply(null);
+    setMemoryToast(null);
     diaryAudio.playInkSink();
 
     const currentMessage = inputText.trim();
@@ -92,17 +104,46 @@ export default function ParchmentSpread({
       setShowSkeleton(true);
 
       const loadStart = Date.now();
-      const result = await onInteract(currentMessage);
-      const elapsed = Date.now() - loadStart;
-      const remaining = Math.max(0, 800 - elapsed);
-      if (remaining > 0) await new Promise(r => setTimeout(r, remaining));
+      // The skeleton stays up until the first streamed ink arrives (with a
+      // short floor, so a fast reply never flashes the loader).
+      let firstChunkSeen = false;
+      // The raw stream, kept intact so the displayed text is re-derived from it
+      // rather than patched in place (see utils/stream.js).
+      let rawReply = '';
+      const reveal = () => {
+        if (firstChunkSeen) return;
+        firstChunkSeen = true;
+        setResponseKey(Date.now());
+        const remaining = Math.max(0, 800 - (Date.now() - loadStart));
+        setTimeout(() => setShowSkeleton(false), remaining);
+      };
+      const onChunk = (piece) => {
+        reveal();
+        rawReply += piece;
+        setActiveReply(displayFromStream(rawReply));
+      };
 
-      setShowSkeleton(false);
+      const result = await onInteract(currentMessage, onChunk);
 
-      if (result && result.should_reply && result.response_text) {
-        setActiveReply(result.response_text);
-      } else {
-        setSilentMessage("The ink sinks quietly into the parchment... The diary remains still.");
+      if (!firstChunkSeen) {
+        // No streamed chunks (silent reply, offline fallback, or a
+        // non-streaming backend): reveal the full reply in one go.
+        setResponseKey(Date.now());
+        const remaining = Math.max(0, 800 - (Date.now() - loadStart));
+        if (remaining > 0) await new Promise(r => setTimeout(r, remaining));
+        setShowSkeleton(false);
+        if (result && result.should_reply && result.response_text) {
+          setActiveReply(result.response_text);
+        } else {
+          setSilentMessage("The ink sinks quietly into the parchment... The diary remains still.");
+        }
+      }
+
+      // "The diary learned something" moment — surface newly extracted
+      // memories so personalization becomes visible to the writer.
+      if (result && result.extracted_memories && result.extracted_memories.length > 0) {
+        const n = result.extracted_memories.length;
+        setMemoryToast(`The diary learned ${n} new ${n === 1 ? 'thing' : 'things'} about you...`);
       }
     }, 1800);
   };
@@ -130,6 +171,12 @@ export default function ParchmentSpread({
   useEffect(() => {
     if (activeReply || silentMessage) setResponseViewIndex(-1);
   }, [activeReply, silentMessage]);
+
+  useEffect(() => {
+    if (!memoryToast) return;
+    const t = setTimeout(() => setMemoryToast(null), 6000);
+    return () => clearTimeout(t);
+  }, [memoryToast]);
 
   return (
     <div className="parchment-spread">
@@ -160,6 +207,18 @@ export default function ParchmentSpread({
             <button className="btn-icon" onClick={() => setShowEntries(!showEntries)} title={showEntries ? 'Hide Memory' : 'Show Memory'}>
               {showEntries ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
+            <button className="btn-icon" onClick={() => setShowMemories(true)} title="What the diary knows">
+              <Brain size={18} />
+            </button>
+            <button
+              className="btn-icon"
+              onClick={() => exportDiaryMarkdown(entries, username)}
+              title="Export diary as Markdown"
+              disabled={entries.length === 0}
+              style={entries.length === 0 ? { opacity: 0.4, cursor: 'default' } : undefined}
+            >
+              <Download size={18} />
+            </button>
             <button className={`btn-icon ${audioEnabled ? 'active' : ''}`} onClick={toggleAudio} title="Toggle Ambient Audio">
               {audioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
             </button>
@@ -183,6 +242,17 @@ export default function ParchmentSpread({
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 {currentEntries.map((entry, idx) => (
                   <div key={entry.id || idx} className="history-entry-item">
+                    <button
+                      className="entry-delete"
+                      title="Tear out this page"
+                      onClick={() => {
+                        if (window.confirm('Tear this page out? This cannot be undone.')) {
+                          onDeleteEntry(entry.id);
+                        }
+                      }}
+                    >
+                      <Trash2 size={12} />
+                    </button>
                     <div className="history-user-text">"{entry.content}"</div>
                     {entry.response ? (
                       <div className="history-riddle-text">
@@ -272,7 +342,7 @@ export default function ParchmentSpread({
                 if (isViewingHistory) {
                   const entry = entries[responseViewIndex];
                   return entry?.response ? (
-                    <TomRiddleWriter text={entry.response} />
+                    <TomRiddleWriter text={entry.response} resetKey={`h-${entry.id}`} />
                   ) : (
                     <p style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: '#8c7355', fontSize: '1rem' }}>
                       *Ink absorbed in silence*
@@ -280,7 +350,7 @@ export default function ParchmentSpread({
                   );
                 }
                 return activeReply ? (
-                  <TomRiddleWriter text={activeReply} />
+                  <TomRiddleWriter text={activeReply} resetKey={responseKey} />
                 ) : silentMessage ? (
                   <p style={{ fontFamily: 'var(--font-serif)', fontStyle: 'italic', color: '#8c7355', fontSize: '1rem' }}>
                     {silentMessage}
@@ -306,6 +376,23 @@ export default function ParchmentSpread({
               </div>
             </div>
           </div>
+        )}
+
+        {memoryToast && (
+          <div className="memory-toast">
+            <Sparkles size={14} />
+            <span>{memoryToast}</span>
+          </div>
+        )}
+
+        {showMemories && (
+          <MemoryModal
+            memories={memories}
+            username={username}
+            onClose={() => setShowMemories(false)}
+            onDelete={onDeleteMemory}
+            onUpdate={onUpdateMemory}
+          />
         )}
       </div>
     </div>

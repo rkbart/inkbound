@@ -1053,3 +1053,217 @@ body {
     height: 12px;
   }
 }
+
+/* ----------------------------------------------------
+   MEMORY TOAST ("the diary learned something")
+   ---------------------------------------------------- */
+.memory-toast {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, rgba(30, 22, 16, 0.95), rgba(17, 11, 7, 0.95));
+  border: 1px solid rgba(184, 134, 11, 0.5);
+  color: #d4af37;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 0.8rem;
+  padding: 8px 14px;
+  border-radius: 20px;
+  z-index: 20;
+  box-shadow: 0 8px 20px rgba(10, 8, 12, 0.6);
+  white-space: nowrap;
+  animation: toastIn 0.5s ease;
+  pointer-events: none;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translate(-50%, 8px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* ----------------------------------------------------
+   ENTRY DELETE ("tear out this page")
+   ---------------------------------------------------- */
+.history-entry-item {
+  position: relative;
+}
+
+.entry-delete {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  background: none;
+  border: none;
+  color: #8c7355;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.history-entry-item:hover .entry-delete {
+  opacity: 0.8;
+}
+
+.entry-delete:hover {
+  opacity: 1;
+  color: #ff6b6b;
+}
+
+@media (max-width: 768px) {
+  .entry-delete {
+    opacity: 0.7; /* no hover on touch — keep it reachable */
+  }
+}
+
+/* ----------------------------------------------------
+   MEMORY MODAL ("what the diary knows")
+   ---------------------------------------------------- */
+.memory-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 8, 12, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+  padding: 20px;
+}
+
+.memory-modal {
+  width: 100%;
+  max-width: 560px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(135deg, #1e1610 0%, #110b07 100%);
+  border: 2px solid #b8860b;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(10, 8, 12, 0.9), 0 0 20px rgba(212, 175, 55, 0.2);
+  color: #f4ebd9;
+}
+
+.memory-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(184, 134, 11, 0.3);
+}
+
+.memory-modal-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #d4af37;
+}
+
+.memory-modal-title h2 {
+  font-family: var(--font-title);
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.memory-modal-subtitle {
+  font-family: var(--font-serif);
+  font-size: 0.9rem;
+  color: #a88d52;
+  font-style: italic;
+  margin-bottom: 14px;
+}
+
+.memory-modal-list {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 120px;
+}
+
+.memory-modal-empty {
+  text-align: center;
+  color: #8c7355;
+  padding: 30px 0;
+  font-style: italic;
+  font-family: var(--font-serif);
+}
+
+.memory-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 6px;
+  border-bottom: 1px dashed rgba(184, 134, 11, 0.2);
+}
+
+.memory-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.memory-row-category {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: #b8860b;
+  letter-spacing: 1px;
+}
+
+.memory-row-key {
+  font-size: 0.85rem;
+  color: #d4af37;
+  font-family: var(--font-serif);
+}
+
+.memory-row-value {
+  font-size: 0.95rem;
+  color: #f4ebd9;
+  font-family: var(--font-body);
+  word-break: break-word;
+}
+
+.memory-row-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.memory-delete {
+  color: #ff6b6b;
+}
+
+.memory-edit-input {
+  background: rgba(212, 175, 55, 0.08);
+  border: 1px solid rgba(184, 134, 11, 0.4);
+  color: #f4ebd9;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  padding: 4px 8px;
+  border-radius: 4px;
+  outline: none;
+  width: 100%;
+}
+
+.memory-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(184, 134, 11, 0.3);
+}
+
+.memory-modal-hint {
+  font-size: 0.75rem;
+  color: #8c7355;
+  font-style: italic;
+  font-family: var(--font-serif);
+}

@@ -89,6 +89,40 @@ export const dbService = {
     return toObjects(result).reverse();
   },
 
+  // Deletes are always scoped by username so one user can never touch
+  // another user's rows. Returns the number of rows removed.
+  async deleteEntry(username, id) {
+    const result = await execute(
+      'DELETE FROM entries WHERE username = ? AND id = ?',
+      [username, Number(id)]
+    );
+    return result.rowsAffected ?? 0;
+  },
+
+  async deleteMemory(username, id) {
+    const result = await execute(
+      'DELETE FROM memories WHERE username = ? AND id = ?',
+      [username, Number(id)]
+    );
+    return result.rowsAffected ?? 0;
+  },
+
+  async updateMemory(username, id, fields) {
+    const sets = [];
+    const args = [];
+    if (fields.value !== undefined) { sets.push('value = ?'); args.push(fields.value); }
+    if (fields.category !== undefined) { sets.push('category = ?'); args.push(fields.category); }
+    if (fields.importance !== undefined) { sets.push('importance = ?'); args.push(fields.importance); }
+    if (sets.length === 0) return 0;
+    sets.push('last_seen = CURRENT_TIMESTAMP');
+    args.push(username, Number(id));
+    const result = await execute(
+      `UPDATE memories SET ${sets.join(', ')} WHERE username = ? AND id = ?`,
+      args
+    );
+    return result.rowsAffected ?? 0;
+  },
+
   async clearUserData(username) {
     await execute(
       'DELETE FROM entries WHERE username = ?',

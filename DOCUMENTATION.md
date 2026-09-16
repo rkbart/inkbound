@@ -15,6 +15,7 @@ This document provides a comprehensive technical breakdown of how **Inkbound** w
    - [Design System & CSS Styling](#design-system--css-styling)
 3. [Backend Implementation](#3-backend-implementation)
    - [Vercel Serverless Functions](#vercel-serverless-functions)
+   - [AI Integration: model chain & streaming](#ai-integration-model-chain--streaming)
    - [Local Development Server](#local-development-server)
    - [Branching Conversation Trees](#branching-conversation-trees)
    - [Theme Detection System](#theme-detection-system)
@@ -27,7 +28,7 @@ This document provides a comprehensive technical breakdown of how **Inkbound** w
 
 ## 1. Architectural Overview
 
-Inkbound is built as a serverless application deployed on Vercel with Turso (hosted SQLite) as the database. The frontend renders an interactive 3D leather journal. The backend uses **Llama 3.1 8B Instruct** (via the NIM API) as the primary intelligence, with a pre-written branching conversation tree system as fallback when no API key is set.
+Inkbound is built as a serverless application deployed on Vercel with Turso (hosted SQLite) as the database. The frontend renders an interactive 3D leather journal. The backend streams replies from a **chain of LLMs on the NVIDIA NIM API** (see [AI Integration](#ai-integration-model-chain--streaming)) as the primary intelligence, with a pre-written branching conversation tree system as fallback when no model answers.
 
 ```mermaid
 sequenceDiagram
@@ -36,7 +37,7 @@ sequenceDiagram
     participant App as React Frontend (Vite)
     participant Audio as Web Audio Synthesizer
     participant API as Vercel Serverless / Local API
-    participant Nemotron as Llama 3.1 8B (NVIDIA NIM)
+    participant Nemotron as LLM Chain (NVIDIA NIM, streamed)
     participant Fallback as Pre-written Response Trees
     participant DB as Turso (SQLite over HTTP)
 
@@ -47,15 +48,16 @@ sequenceDiagram
     App->>App: Trigger CSS Ink Dissolve Animation (1.8s)
     App->>API: POST /api/interact { content, personaName, username }
     API->>DB: Fetch memories & conversation history
-    alt NVIDIA_API_KEY is set
+    alt a model answers
         API->>Nemotron: Send prompt with persona, memories, history
-        Nemotron-->>API: JSON { should_reply, response_text, extracted_memories }
-    else No API key or API error
+        Nemotron-->>App: NDJSON chunks {"t":"chunk","v":"..."} (streamed live)
+        Nemotron-->>API: ---REPLY---/---MEMORIES--- sections
+    else No API key, all models fail, or API error
         API->>Fallback: Detect themes, select tier, pick response
-        Fallback-->>API: Curated response
+        Fallback-->>App: Reply delivered as a single chunk
     end
     API->>DB: Save extracted memories & entry
-    API-->>App: JSON response payload
+    API-->>App: {"t":"done", should_reply, response_text, extracted_memories}
     App->>Audio: Play Ink Resurface Sound
     App->>App: Render character ink bleed animation
 ```
@@ -71,18 +73,22 @@ The frontend is implemented using **React 19** and **Vite**, structured into mod
 - **App.jsx**: Root component managing top-level state: book open/closed state, entries log, memories bank, modal visibility, and backend fetch/sync lifecycle handlers.
 - **BookCover.jsx**: Renders the closed leather-bound book cover featuring embossed typography, gold corner plates, and center glowing crest.
 - **ParchmentSpread.jsx**: The main interactive two-page spread with left page (memory ledger with pagination) and right page (writing/response view). On mobile, displays as a tabbed single-page view with Memory/Write tabs.
-- **TomRiddleWriter.jsx**: Typewriter component that renders text character-by-character with staggered CSS ink bleed animations.
-- **MemoryModal.jsx**: Overlay modal visualizing the extracted user memory bank.
+- **TomRiddleWriter.jsx**: Reveals text as ink, one character at a time with staggered CSS bleed animations. The reveal *chases* a growing target, so a streamed reply is written progressively without ever restarting.
+- **MemoryModal.jsx**: Overlay modal visualizing the extracted user memory bank, with per-row inline editing and deletion.
 - **LoginPage.jsx**: Name-based identity entry. Users type their name to access their personal diary. No password or registration required.
 - **audio.js**: Custom Web Audio API procedural sound engine.
+- **utils/stream.js**: `displayFromStream()` — strips the machine-readable `---MEMORIES---` section (even when a marker is split across two chunks) so it can never reach the page.
+- **utils/export.js**: `exportDiaryMarkdown()` — client-side Markdown export of the whole diary.
 
 ### State & Interaction Lifecycle
 
 When the user enters text on the parchment and triggers "Sink Ink into Paper":
 1. CSS class `.ink-sinking` is applied, triggering blur, scale reduction, and opacity fade over `1.8s`.
 2. `diaryAudio.playInkSink()` triggers a pitch-dropping sine oscillator sweep.
-3. After animation completes, `onInteract(currentMessage)` fires an HTTP request to `/api/interact`.
-4. Upon receiving the response, `TomRiddleWriter` reveals the ink response character by character.
+3. After the animation completes, `onInteract(currentMessage, onChunk)` fires an HTTP request to `/api/interact`.
+4. The response arrives as **NDJSON**: `{"t":"chunk","v":"..."}` events are appended to the reply as the model writes, and a final `{"t":"done",...}` event closes it out. A minimum 800 ms floor holds the skeleton so a fast reply never flashes the loader.
+5. `TomRiddleWriter` reveals the ink response character by character (3 chars per tick when a large chunk is queued), so the writing appears as fast as the model thinks.
+6. If new facts were extracted, a toast announces what the diary learned.
 
 ### Design System & CSS Styling
 
@@ -108,32 +114,49 @@ api/
 ├── _lib/
 │   ├── db.js              # Turso client + database operations
 │   ├── diary.js           # Main interaction logic (routes to AI or fallback)
-│   ├── nemotron.js        # NVIDIA Nemotron API client
-│   ├── themes.js          # Theme detection (12 themes, fallback system)
+│   ├── nemotron.js        # LLM client (NVIDIA NIM, streamed; named after a retired model)
+│   ├── themes.js          # Theme detection (10 themes, fallback system)
 │   ├── responses.js       # ~250 curated responses (fallback system)
 │   ├── brancher.js        # Branch selection logic (fallback system)
 │   └── picker.js          # Response picking + personalization (fallback system)
-├── interact.js            # POST /api/interact
-├── entries.js             # GET /api/entries
-├── memories.js            # GET /api/memories
-└── reset.js               # POST /api/reset
+├── interact.js            # POST /api/interact (NDJSON stream)
+├── entries.js             # GET / DELETE /api/entries
+├── memories.js            # GET / DELETE / PATCH /api/memories
+└── reset.js               # POST /api/reset (username required)
 ```
 
-### Nemotron AI Integration
+### AI Integration: model chain & streaming
 
-The primary intelligence uses Llama 3.1 8B Instruct via the NIM API (OpenAI-compatible endpoint).
+The primary intelligence is a **chain of models** called through the NIM API (OpenAI-compatible endpoint):
 
 **API endpoint:** `https://integrate.api.nvidia.com/v1/chat/completions`
-**Model:** `meta/llama-3.1-8b-instruct`
+
+| Order | Model | Role |
+|---|---|---|
+| 1 | `google/gemma-4-31b-it` | primary |
+| 2 | `mistralai/mistral-nemotron` | fallback |
+| 3 | `meta/llama-3.2-11b-vision-instruct` | last resort |
+
+> ⚠️ Free-tier model IDs on NIM **retire without warning**, and a retired model is not always removed from `GET /v1/models` — so a catalogue listing is not proof of service. This app has already outlived two model retirements (`meta/llama-3.1-8b-instruct` and `nvidia/llama-3.1-nemotron-70b-instruct`), and `nvidia/llama3-chatqa-1.5-70b` still lists but answers 404. `scripts/list-models.mjs` lists what the account can see; verify any candidate with a real request before switching.
 
 The integration works by:
-1. Building a system prompt with the Tom Riddle persona (1940s British tone)
+1. Building a system prompt with the diary persona (1940s British tone) plus boundary rules
 2. Injecting extracted memories as context (`• [Category] Key: Value`)
 3. Including the last 8 conversation messages for continuity
-4. Sending to the NIM API
-5. Parsing the JSON response for `should_reply`, `response_text`, and `extracted_memories`
-6. If JSON parsing fails, falls back to using raw model text as the response
-7. Sanitizing `response_text` to strip any leaked JSON artifacts
+4. Asking for plain prose between two markers:
+   ```
+   ---REPLY---
+   Your in-character reply here (1-3 sentences of plain prose).
+   ---MEMORIES---
+   [{"category": "...", "key": "...", "value": "...", "importance": 1-5}]
+   ```
+   Prose between markers replaced an earlier "reply as JSON" contract: JSON formatting drags models out of character, and prose streams far more naturally.
+5. Requesting with `stream: true`, reading the SSE body, and forwarding only the reply section to the client as it arrives
+6. Parsing the memories JSON after the stream ends, with a fallback to a legacy JSON parser if a model ignores the markers entirely
+7. Sanitizing `response_text` to strip any leaked markers, JSON artifacts, or code fences
+8. Persisting memories, both conversation turns, and the entry (all in parallel)
+
+Every attempt shares a **24 s wall-clock budget** so a stalled model cannot starve its own fallbacks, and a retry only happens when an attempt produced *nothing* — so the writer never sees two replies spliced together.
 
 **Personality prompt highlights:**
 - "Polite, articulate, charming, curious, and quietly intense"
@@ -275,27 +298,21 @@ function toObjects(result) {
 **Request:**
 ```json
 {
-  "content": "string (required)",
-  "personaName": "string (optional, default: 'Tom')",
+  "content": "string (required, max 4000 chars)",
+  "personaName": "string (optional, default: 'Tom Riddle')",
   "username": "string (optional, default: 'anonymous')"
 }
 ```
 
-**Response:**
-```json
-{
-  "should_reply": true,
-  "response_text": "I am Tom Riddle. I listen. I remember. I write back.",
-  "extracted_memories": [
-    {
-      "category": "Identity",
-      "key": "User Name",
-      "value": "Alice",
-      "importance": 5
-    }
-  ]
-}
+**Response:** `Content-Type: application/x-ndjson` — a stream of line-delimited JSON events:
+
 ```
+{"t":"chunk","v":"Tell me, my friend..."}
+{"t":"chunk","v":" what troubles you?"}
+{"t":"done","should_reply":true,"response_text":"Tell me, my friend... what troubles you?","extracted_memories":[{"category":"Identity","key":"User Name","value":"Alice","importance":5}]}
+```
+
+A client that cannot consume NDJSON can still read the final line, since `done` carries the complete reply. Errors return plain JSON: `400` (missing/blank content, or over 4000 chars), `405`, `500`.
 
 ### GET /api/entries?username=someuser
 
@@ -312,6 +329,18 @@ function toObjects(result) {
   }
 ]
 ```
+
+### GET / DELETE / PATCH /api/entries & /api/memories
+
+| Endpoint | Method | Body / Query | Notes |
+|---|---|---|---|
+| `/api/entries` | GET | `?username=` | Returns `[{ id, username, content, response, mood, created_at }]`, oldest first |
+| `/api/entries` | DELETE | `{ id, username }` | Tears out one entry; scoped to the username |
+| `/api/memories` | GET | `?username=` | Returns `[{ id, username, category, key, value, importance, last_seen }]`, importance desc |
+| `/api/memories` | DELETE | `{ id, username }` | "Obliviate" one memory; scoped to the username |
+| `/api/memories` | PATCH | `{ id, username, value?, category?, importance? }` | Rewrite a memory. `value` 1–500 chars, `category` must be one of the known set, `importance` 1–5 |
+
+All memory and entry mutations are **scoped to the supplied username**, so one user can never read or destroy another's rows.
 
 ### GET /api/memories?username=someuser
 
@@ -408,23 +437,24 @@ inkbound/
 │   ├── _lib/                     # Shared utilities
 │   │   ├── db.js                 # Turso client with connection retry
 │   │   ├── diary.js              # Main interaction logic (routes AI or fallback)
-│   │   ├── nemotron.js           # NVIDIA NIM API client (Llama 3.1 8B)
+│   │   ├── nemotron.js           # LLM client (NVIDIA NIM, streamed; named after a retired model)
 │   │   ├── themes.js             # Theme detection (regex + keywords, fallback)
 │   │   ├── responses.js          # ~250 curated responses (fallback)
 │   │   ├── brancher.js           # Branch/tier selection (fallback)
 │   │   └── picker.js             # Response picking + personalization (fallback)
-│   ├── interact.js               # POST /api/interact
-│   ├── entries.js                # GET /api/entries
-│   ├── memories.js               # GET /api/memories
-│   └── reset.js                  # POST /api/reset
+│   ├── interact.js               # POST /api/interact (NDJSON stream)
+│   ├── entries.js                # GET / DELETE /api/entries
+│   ├── memories.js               # GET / DELETE / PATCH /api/memories
+│   └── reset.js                  # POST /api/reset (username required)
 ├── public/
 │   └── fonts/                    # Self-hosted web fonts
 ├── scripts/
-│   └── setup-db.js               # Turso schema initialization
+│   ├── setup-db.js               # Turso schema initialization
+│   └── list-models.mjs           # List the NVIDIA models this account can see
 ├── src/                          # React frontend
 │   ├── App.jsx                   # Root component (API_BASE = '/api')
 │   ├── components/               # UI components
-│   └── utils/audio.js            # Web Audio synthesizer
+│   └── utils/                    # audio.js, stream.js, export.js
 ├── server-dev.js                 # Local API dev server (port 3001)
 ├── schema.sql                    # Database schema
 ├── vercel.json                   # Vercel configuration

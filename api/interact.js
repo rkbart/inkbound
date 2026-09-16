@@ -1,4 +1,4 @@
-import { interactWithDiary, MAX_CONTENT_LENGTH } from './_lib/diary.js';
+import { streamDiaryInteraction, MAX_CONTENT_LENGTH } from './_lib/diary.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -17,15 +17,22 @@ export default async function handler(req, res) {
 
   try {
     console.log('Interact start:', { content: content.slice(0, 50), personaName, username });
-    const result = await interactWithDiary(
-      content.trim(),
-      personaName || 'Tom Riddle',
-      username || 'anonymous'
-    );
-    console.log('Interact result:', { hasResponse: !!result?.response_text, shouldReply: result?.should_reply });
-    return res.status(200).json(result);
+    // Streams the reply as newline-delimited JSON: "chunk" events while the
+    // model writes, then a final "done" event with the extracted memories.
+    // If the platform buffers instead of streaming, the client still parses
+    // the full body and renders as before (graceful degradation).
+    res.writeHead(200, {
+      'Content-Type': 'application/x-ndjson; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      'X-Accel-Buffering': 'no'
+    });
+    res.flushHeaders?.();
+    await streamDiaryInteraction(res, content.trim(), personaName || 'Tom Riddle', username || 'anonymous');
   } catch (err) {
     console.error('Interact error:', err.message, err.stack);
-    return res.status(500).json({ error: 'Failed to process diary entry' });
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Failed to process diary entry' });
+    }
+    try { res.end(); } catch { /* already closed */ }
   }
 }

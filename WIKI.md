@@ -34,7 +34,7 @@ Inkbound is an immersive, dark-fantasy interactive diary (inspired by Tom Riddle
 
 There are two "brains" behind the diary:
 
-- **Primary (online)**: an LLM (Llama 3.1 8B Instruct, via NVIDIA's free NIM API) generates real, contextual, in-character replies.
+- **Primary (online)**: a chain of LLMs (via NVIDIA's free NIM API) generates real, contextual, in-character replies, **streamed** onto the page as they are written.
 - **Fallback (offline)**: a hand-written engine of ~250 curated responses organized into themed "conversation trees" — so the app *never* breaks, even with zero API keys.
 
 Everything the user writes, and everything the diary learns, is stored in a hosted SQLite database (Turso) so it persists between visits.
@@ -53,7 +53,7 @@ Everything the user writes, and everything the diary learns, is stored in a host
 | Backend (prod) | **Vercel Serverless Functions** (`api/*.js`) | Deploys with the frontend for free; each endpoint is an isolated, autoscaling function. |
 | Backend (dev) | **Plain Node `http` server** (`server-dev.js`) | Mimics the serverless routes locally without any framework; shares the *exact same* business-logic modules. |
 | Database | **Turso** (hosted SQLite over HTTP) via `@tursodatabase/serverless` | Free tier, serverless-friendly (HTTP, no TCP connections to leak), SQL-simple for a small schema. |
-| AI | **Llama 3.1 8B Instruct** via **NVIDIA NIM API** | Free API key, OpenAI-compatible chat-completions endpoint. |
+| AI | **LLM chain** via **NVIDIA NIM API**, streamed | Free API key, OpenAI-compatible chat-completions endpoint. A chain of models (not one pinned ID) absorbs NVIDIA's frequent free-tier retirements. |
 | Linting | **oxlint** | Extremely fast Rust-based linter, configured for React rules-of-hooks. |
 | Dev orchestration | **concurrently** | One `npm run dev` boots the local API server *and* Vite together. |
 
@@ -86,8 +86,8 @@ Notable *absences* (deliberate choices):
                            │ import { ... } from './_lib/*'   ◄── SHARED LOGIC
           ┌────────────────▼─────────────────────┐
           │ api/_lib/                            │
-          │  diary.js ──── the orchestrator      │
-          │     ├─ nemotron.js ──► NVIDIA NIM API│ (primary)
+          │  diary.js ── streamDiaryInteraction ─┐
+          │     ├─ nemotron.js ──► NVIDIA NIM API│ (model chain, streamed)
           │     └─ themes/brancher/picker ───────┤ (fallback)
           │  db.js ──────────────► Turso (SQLite)│
           └──────────────────────────────────────┘
@@ -106,17 +106,21 @@ inkbound/
 ├── vercel.json                # Prod: build dist/, treat api/*.js as functions (30s max)
 ├── package.json               # Scripts: dev (concurrently), build, lint
 ├── .env                       # Secrets (gitignored) — see §10
-├── schema.sql                 # DDL for the 3 database tables
-├── scripts/setup-db.js        # Applies schema.sql to Turso
+├── schema.sql                 # DDL for the 3 tables + unique/lookup indexes
+├── scripts/setup-db.js        # Applies schema.sql to Turso (idempotent)
+├── scripts/list-models.mjs    # Lists the models the NVIDIA account can see
 ├── server-dev.js              # Local Node API server (port 3001), mirrors api/ routes
 ├── api/                       # === PRODUCTION BACKEND (Vercel functions) ===
-│   ├── interact.js            # POST /api/interact — the diary conversation endpoint
-│   ├── entries.js             # GET  /api/entries   — fetch a user's entries
-│   ├── memories.js            # GET  /api/memories  — fetch a user's memory bank
-│   ├── reset.js               # POST /api/reset     — clear a user's data
+│   ├── interact.js            # POST   /api/interact — conversation endpoint (NDJSON stream)
+│   ├── entries.js             # GET    /api/entries   — fetch a user's entries
+│   │                          # DELETE /api/entries   — tear out one page
+│   ├── memories.js            # GET    /api/memories  — fetch a user's memory bank
+│   │                          # PATCH  /api/memories  — rewrite one memory
+│   │                          # DELETE /api/memories  — obliviate one memory
+│   ├── reset.js               # POST   /api/reset     — clear a user's data
 │   └── _lib/                  # Shared business logic (used by BOTH backends)
 │       ├── diary.js           # Orchestrator: try AI, else fallback; persists results
-│       ├── nemotron.js        # LLM client (prompt building + robust JSON parsing)
+│       ├── nemotron.js        # LLM client: model chain, streaming, marker parsing
 │       ├── themes.js          # Keyword/regex engine: theme detection + extraction
 │       ├── responses.js       # ~250 curated responses + silent responses
 │       ├── brancher.js        # Picks response "tier" based on conversation history
@@ -128,11 +132,14 @@ inkbound/
 │   ├── index.css              # Entire design system (~1036 lines)
 │   ├── components/
 │   │   ├── LoginPage.jsx      # Name entry / returning-user screen
-│   │   ├── BookCover.jsx      # Closed leather book (click to open)
-│   │   ├── ParchmentSpread.jsx# Main 2-page spread: ledger + writer (~311 lines)
-│   │   ├── TomRiddleWriter.jsx# Character-by-character ink reveal component
-│   │   └── MemoryModal.jsx    # Overlay listing extracted memories
-│   └── utils/audio.js         # DiaryAudioEngine class (procedural sound)
+│   │   ├── BookCover.jsx      # Closed leather book (click to open; greets returning writers)
+│   │   ├── ParchmentSpread.jsx# Main 2-page spread: ledger + writer
+│   │   ├── TomRiddleWriter.jsx# Ink reveal that chases a growing (streamed) reply
+│   │   └── MemoryModal.jsx    # "What the Diary Knows" — view/edit/obliviate memories
+│   └── utils/
+│       ├── audio.js           # DiaryAudioEngine class (procedural sound)
+│       ├── stream.js          # displayFromStream(): hides the memories marker safely
+│       └── export.js          # exportDiaryMarkdown(): client-side .md download
 ├── public/fonts/              # Self-hosted fonts (Cinzel, IM Fell, Marck, Playfair)
 └── data/inkbound.db           # Local SQLite file (dev artifact)
 ```
@@ -158,19 +165,25 @@ inkbound/
    - Sets `isSinking=true` → the `.ink-sinking` CSS class blurs/fades/shrinks the text over **1.8 s**.
    - Plays the **ink sink** sound (a sine sweep dropping 320 Hz → 80 Hz).
    - After the 1.8 s timeout: clears input, switches to the response view, shows **skeleton loaders**.
-4. Calls `onInteract(currentMessage)` → `App.handleInteract` → `POST /api/interact` with `{ content, personaName, username }`.
-5. **On the server** (see §7 for detail): the orchestrator tries the LLM; if unavailable, uses the fallback engine. Either way it saves the entry, conversation turn, and any extracted memories to Turso, then returns `{ should_reply, response_text, extracted_memories }`.
-6. Back in the browser: a **minimum 800 ms** "thinking" floor is enforced so skeletons don't flash, then the reply is handed to `<TomRiddleWriter />`.
-7. `TomRiddleWriter` reveals the reply **one character every 45 ms**, wrapping each char in a `<span class="ink-bleed-char">` with staggered animation delays, playing a subtle scratch every 3rd character. An **ink resurface** sound (110→260 Hz triangle sweep) plays at the start.
-8. `App` re-fetches entries and memories so the left-page ledger updates.
-9. Double-clicking the page again returns to the writing view.
+4. Calls `onInteract(currentMessage, onChunk)` → `App.handleInteract` → `POST /api/interact` with `{ content, personaName, username }`.
+5. **On the server** (see §7 for detail): the orchestrator streams the reply from the LLM (walking a chain of models), or uses the fallback engine if no model answers. Either way it saves the entry, conversation turn, and any extracted memories to Turso, then emits a final `done` event.
+6. Back in the browser, `readInteractionStream` parses the response as **NDJSON**, a line-delimited stream of small JSON events:
+   - `{"t":"chunk","v":"..."}` — a few words of the reply, forwarded to `onChunk` the instant they arrive;
+   - `{"t":"done", ...}` — the final `{ should_reply, response_text, extracted_memories[] }`.
+   A **minimum 800 ms** "thinking" floor holds the skeleton until the first chunk lands, so a fast reply never flashes the loader. If the server cannot stream (or the reply arrives as one piece), the same parsing path still yields the full text.
+7. The chunks accumulate in `activeReply`, and `displayFromStream()` strips anything from `---MEMORIES---` onward — including a *partial* marker split across two chunks — so machine-readable text never reaches the page.
+8. `<TomRiddleWriter />` reveals the growing reply **one character every 45 ms** (3 chars per tick when a large chunk is queued), wrapping each char in a `<span class="ink-bleed-char">` with staggered animation delays and playing a subtle scratch every 3rd character. An **ink resurface** sound (110→260 Hz triangle sweep) plays at the start. The reveal *chases* the stream without ever restarting.
+9. If the reply taught the diary something new, a **memory toast** slides in — *"The diary learned 2 new things about you..."* — and fades after 6 s. `App` also re-fetches entries and memories so the left-page ledger updates.
+10. Double-clicking the page again returns to the writing view.
+11. On a plain-JSON or offline backend, `handleInteract` returns a local fallback reply so the diary always answers (see §6.1).
 
-### C. Memory & settings
+### C. Memory, ledger & settings
 
-- The left page shows a paginated **entry ledger** (3 per page, auto-jumps to the last page when new entries arrive).
-- `MemoryModal` can display the extracted **memory bank** (`[Category] Key: value` badges).
-- Settings panel (rendered in `App.jsx`): change the **persona name** (renames the diary character, persisted per-user in localStorage), **clear memory** (`POST /api/reset` — deletes entries/conversation, preserves Persona/Origin memories), or **log out**.
-- Graceful degradation everywhere: if the backend is unreachable, fetches fail silently (`console.warn`) and the diary still works with a local fallback reply.
+- The left page shows a paginated **entry ledger** (3 per page, auto-jumps to the last page when new entries arrive). Each entry has a **tear-out** button (hover) — deleting asks for confirmation and is scoped to the username server-side.
+- The **brain button** opens `MemoryModal` — *"What the Diary Knows"*. This is where the personalization becomes legible: each row shows `[Category] Key: value`, and can be **rewritten** (fix a misheard name → Enter/blur saves, Escape cancels) or **obliterated** individually. Both operations are optimistic: the UI updates first, then re-fetches so it settles to the server's truth.
+- The **download button** exports the whole diary as Markdown (client-side blob, no server round-trip).
+- Settings panel (rendered in `App.jsx`): change the **persona name** (renames the diary character, persisted per-user in localStorage), **clear memory** (`POST /api/reset` — deletes entries/conversation and all non-`Persona` memories for that user; a username is required, so no blanket wipe is possible), or **log out**.
+- Graceful degradation everywhere: if the backend is unreachable, fetches fail silently (`console.warn`) and the diary still works with a local fallback reply. Every fetch also carries an abort timeout (25 s; 40 s for `/api/interact`, which streams) so a hung request can never leave the UI spinning forever.
 
 ---
 
@@ -187,15 +200,18 @@ inkbound/
 | `user` | `{ username, createdAt }` from localStorage, or `null` (= show login) |
 | `isOpen` | Book cover (false) vs. spread (true) |
 | `entries` | Array of `{ id, content, response, created_at }` from `/api/entries` |
-| `memories` | Extracted memory bank from `/api/memories` |
+| `memories` | Extracted memory bank from `/api/memories` — feeds `MemoryModal` |
 | `isLoading` | True while `/api/interact` is in flight |
 | `personaName` | The diary character's name (default `'Tom'`) |
 | `showSettings` | Settings modal visibility |
 
 Key functions:
 
+- `fetchWithTimeout(url, opts, ms)` — `fetch` wrapped in `AbortSignal.timeout`, so a stalled request rejects into the existing try/catch instead of hanging the UI.
 - `fetchEntries()` / `fetchMemories()` — GET requests, wrapped in try/catch so an offline backend never crashes the UI.
-- `handleInteract(content)` — POSTs to `/api/interact`; on success refreshes entries + memories and returns the API payload to `ParchmentSpread`; on failure builds a **local fallback reply** and appends a synthetic entry so the UI keeps working.
+- `handleInteract(content, onChunk)` — POSTs to `/api/interact`, hands the response to `readInteractionStream`, refreshes entries + memories after the `done` event, and returns the payload to `ParchmentSpread`. On failure it builds a **local fallback reply** and appends a synthetic entry so the UI keeps working.
+- `readInteractionStream(res, onChunk)` — the NDJSON reader: falls back to `res.json()` when the server didn't stream, otherwise reads `res.body.getReader()`, decodes chunks with a `TextDecoder`, buffers, and splits on newlines (a chunk can straddle two reads — this buffering is the part beginners most often get wrong).
+- `handleDeleteMemory(id)` / `handleUpdateMemory(id, value)` / `handleDeleteEntry(id)` — optimistic mutations: update state, fire the request, then re-fetch.
 - `handleSavePersona`, `handleClearMemory`, `handleLogout` — settings actions.
 
 > 💡 Learning point: notice `App` does **no rendering** of the book internals — it composes child components and passes callbacks down. This one-way data flow (state up top, events bubble up via callbacks) is the canonical React pattern for small apps.
@@ -207,16 +223,19 @@ Key functions:
 - *New*: a form that saves `{username, createdAt}` and calls `onLogin`.
 - *Returning*: "Welcome back, {name}" with a Continue button (and a log-out that clears storage + reloads).
 
-**`BookCover.jsx`** — Pure presentational. A clickable leather cover: `corner-plate` divs, embossed `<h1>INKBOUND</h1>`, a glowing gold crest (lucide `Sparkles`), and "Click cover to open". All the visual magic lives in CSS classes; the component just composes them.
+**`BookCover.jsx`** — Nearly pure presentational. A clickable leather cover: `corner-plate` divs, embossed `<h1>INKBOUND</h1>`, a glowing gold crest (lucide `Sparkles`), and "Click cover to open". The one conditional: when `username` is passed it greets the returning writer ("Welcome back, Corvus") instead of the click hint. All the visual magic lives in CSS classes; the component just composes them.
 
-**`ParchmentSpread.jsx`** (~311 lines) — the workhorse. Its own local state:
+**`ParchmentSpread.jsx`** — the workhorse (the largest component). Its own local state:
 
 | State | Purpose |
 |---|---|
 | `inputText` | What the user is typing |
 | `isSinking` / `viewState` | Drives the ink-dissolve animation and write↔response view |
-| `activeReply` / `silentMessage` | The reply to render (or a "diary stayed silent" note) |
+| `activeReply` / `silentMessage` | The reply to render — grown chunk by chunk while streaming (or a "diary stayed silent" note) |
+| `responseKey` | Bumped to restart `TomRiddleWriter`'s reveal for a new reply |
+| `memoryToast` | The "The diary learned N new things about you..." notice (auto-clears after 6 s) |
 | `showEntries` / `currentPage` | Ledger visibility + pagination (3 entries/page, auto-advances to newest) |
+| `showMemories` | `MemoryModal` ("What the Diary Knows") visibility |
 | `responseViewIndex` | ≥0 means "browsing an old entry's reply" instead of the live reply |
 | `showSkeleton` | Skeleton loaders while waiting for the API (with a 800 ms minimum) |
 | `mobileTab` | `memory` / `write` — mobile-only tab switcher (CSS hides one page at a time ≤768 px) |
@@ -228,14 +247,25 @@ guard (empty / already sinking / already loading)
 → isSinking=true, play ink-sink sound
 → setTimeout 1800ms:            [CSS animation plays during this]
     clear input, viewState='response', showSkeleton=true
-    t0 = now → await onInteract(msg)
-    wait max(0, 800ms − elapsed) ← "thinking floor" so skeletons feel intentional
-    showSkeleton=false → render reply via TomRiddleWriter
+    t0 = now
+    onChunk(piece) → grow activeReply (displayFromStream strips the memories marker)
+                     first chunk: start the 800ms "thinking floor" timer
+    await onInteract(msg, onChunk)
+    if no chunk ever arrived (offline / non-streaming):
+        wait max(0, 800ms − elapsed), then reveal result.response_text in one go
+    showSkeleton=false → TomRiddleWriter animates the reply in
+    result.extracted_memories.length > 0 → show the memory toast
 ```
 
-**`TomRiddleWriter.jsx`** (48 lines) — the typewriter. Receives `text`; an interval increments `displayedChars` every 45 ms, slicing the string. Each revealed character is a `<span>` with `animation-delay: (index % 10) * 0.02s` so the "ink bleed" ripples in waves. Pen-scratch audio every 3rd character. Cleans up its interval on unmount/`text` change (important React hygiene!).
+> 💡 Learning point: the "thinking floor" is computed as `Math.max(0, 800 − elapsed)` — the same trick as a minimum loading duration. A fast answer still shows the loader briefly, so the UI feels deliberate rather than flickery, and a slow one is unaffected.
 
-**`MemoryModal.jsx`** — Overlay listing memories as `[CATEGORY]` + key + value badges, with an "Obliviate (Clear Memory)" button. Styling is inline here (a contrast to the CSS-file convention elsewhere — worth noting when adding new components).
+**`TomRiddleWriter.jsx`** — the typewriter that *chases a growing target*. It keeps `text` in a ref (`textRef`) precisely so the 45 ms interval does **not** restart when new chunks arrive; each tick slices `textRef.current` up to `displayedChars`, stepping 3 characters when more than 150 are queued (so a large buffered chunk doesn't crawl). Each revealed character is a `<span>` with `animation-delay: (index % 10) * 0.02s` so the "ink bleed" ripples in waves; pen-scratch audio every 3rd character. A new `resetKey` (not new text!) starts a fresh reveal, and the interval is cleaned up on unmount.
+
+**`MemoryModal.jsx`** — "What the Diary Knows". Lists the memory bank as `[Category]` + key + value rows, each with a **rewrite** action (inline input; Enter/blur saves, Escape cancels, `onMouseDown` preventDefault so blur doesn't fire first) and an **obliviate** action. It's a *controlled* component: it owns only `editingId`/`editValue` and delegates the mutations upward via `onUpdate`/`onDelete`, so `App` remains the single writer of `memories`.
+
+**`src/utils/stream.js`** — `displayFromStream(raw)`. The subtle bug it solves: the `---MEMORIES---` marker can arrive split across two chunks (`"---MEMO"` + `"RIES---"`), so a naive `indexOf` cut would flash partial marker characters on the page. It derives the display text from the *whole* raw stream and drops any trailing fragment that is a proper prefix of the marker — safe because the hidden characters stay in the raw text and reappear if they turn out to be genuine prose.
+
+**`src/utils/export.js`** — `exportDiaryMarkdown(entries, username)`: builds a Markdown transcript in memory, then downloads it with a `Blob` + a temporary `<a download>` (revoking the object URL afterwards). No server involvement.
 
 ### 6.3 The Web Audio Engine
 
@@ -256,7 +286,7 @@ guard (empty / already sinking / already loading)
 
 ### 6.4 CSS Design System
 
-All in **`src/index.css`** (~1036 lines). Structure worth studying:
+All in **`src/index.css`** (1269 lines). Structure worth studying:
 
 - **`@font-face` × 7** — self-hosted fonts from `/public/fonts` with `font-display: swap` (text renders immediately in a fallback font, then swaps — avoids invisible text).
 - **`:root` custom properties** — the whole palette + font stacks in one place:
@@ -269,7 +299,11 @@ All in **`src/index.css`** (~1036 lines). Structure worth studying:
   - `.ink-sinking` — blur + scale + opacity fade (the 1.8 s dissolve).
   - `.ink-bleed-char` — per-character reveal with a dark-violet ink glow.
   - `.skeleton-line` — pulsing placeholder bars (`skeletonPulse` keyframes).
+  - `.memory-toast` — the "the diary learned something" notice (fades in/out).
+  - `.memory-modal*` / `.memory-row*` — the memory-bank overlay, rows, category/key/value, inline edit input, and per-row actions.
+  - `.entry-delete` — the tear-out button that appears on ledger-row hover.
 - **Accessibility**: a large `@media (prefers-reduced-motion: reduce)` block disables/disarms animations, plus `prefers-reduced-transparency` support. `dvh` units are used instead of `vh` for mobile-Safari-safe full-height layouts.
+- **Touch & selection hardening**: `touch-action: manipulation` on the textarea and spread stops iOS double-tap-to-zoom from fighting the double-tap-to-submit gesture, and `user-select: text` is re-enabled on the reading surfaces (ledger rows, textarea) while the response page stays non-selectable so double-click-to-continue never highlights text.
 - **Responsive strategy**: desktop = two-page spread with a `.spine-fold` down the middle; `@media (max-width: 768px)` collapses to a single page toggled by the `.mobile-tabs` bar; `@media (max-width: 480px)` shrinks type and touch targets further.
 
 ---
@@ -293,16 +327,21 @@ The handlers themselves are deliberately dumb: validate input → call one `_lib
 
 | Endpoint | Method | Body / Query | Returns |
 |---|---|---|---|
-| `/api/interact` | POST | `{ content, personaName?, username? }` — content capped at 4000 chars (over → 400) | `{ should_reply, response_text, extracted_memories[] }` |
+| `/api/interact` | POST | `{ content, personaName?, username? }` — content capped at 4000 chars (over → 400) | **NDJSON stream**: `{"t":"chunk","v":"…"}` events, then `{"t":"done", should_reply, response_text, extracted_memories[]}` |
 | `/api/entries` | GET | `?username=` | `[{ id, username, content, response, mood, created_at }]` (oldest first) |
+| `/api/entries` | DELETE | `{ id, username }` (both required → else 400) | `{ success: true, deleted }` — scoped to the username |
 | `/api/memories` | GET | `?username=` | `[{ id, category, key, value, importance, last_seen }]` (importance desc) |
-| `/api/reset` | POST | `{ username }` (**required** — no username → 400) | `{ success: true, message }` — clears that user's entries/conversation and all non-Persona memories. A blanket wipe is impossible. |
+| `/api/memories` | PATCH | `{ id, username, value?, category?, importance? }` | `{ success: true, updated }` — `value` 1–500 chars, `category` must be in the allow-list, `importance` 1–5 |
+| `/api/memories` | DELETE | `{ id, username }` | `{ success: true, deleted }` — scoped to the username |
+| `/api/reset` | POST | `{ username }` (**required** — no username → 400) | `{ success: true, message }` — clears that user's entries/conversation and all non-`Persona` memories. A blanket wipe is impossible. |
+
+> 💡 Learning point: mutations read the **username from the JSON body**, reads take it from the **query string**. `api/memories.js` resolves both in one place. Getting this wrong is silently destructive — if the handler fell back to `'anonymous'`, an edit would "succeed" (200) while changing nothing the user can see, and a deleted memory would reappear on the next fetch. The dev-server suite missed this because `server-dev.js` has its own routes; only calling the Vercel handlers directly exposed it.
 
 ### 7.3 The AI brain: `nemotron.js`
 
-> The file is named after an earlier model choice; it currently calls **`meta/llama-3.1-8b-instruct`** at `https://integrate.api.nvidia.com/v1/chat/completions` (an OpenAI-compatible endpoint).
+> The filename is historical. It currently calls **`google/gemma-4-31b-it`** through `https://integrate.api.nvidia.com/v1/chat/completions` (an OpenAI-compatible endpoint) — and falls back to **`mistralai/mistral-nemotron`**, then **`meta/llama-3.2-11b-vision-instruct`**. See *Model selection* below: two earlier choices were retired out from under this app.
 
-`interactWithNemotron(userMessage, personaName, username)`:
+`interactWithNemotronStream(userMessage, personaName, username, onDelta)`:
 
 1. **No API key? Return `null` immediately** — that's the signal for `diary.js` to use the fallback engine.
 2. Fetch the user's **memories** and last **8 conversation messages** from the DB (in parallel).
@@ -314,15 +353,38 @@ The handlers themselves are deliberately dumb: validate input → call one `_lib
    [...assistant/user history…]
    [user]    the new entry
    ```
-   The system prompt is the personality: 1940s British English, no AI disclaimers, 1–3 sentences, **and a strict output contract**: respond as JSON `{ should_reply, response_text, extracted_memories[] }` where each memory has `category / key / value / importance`.
-5. `fetch` with `temperature: 0.9, max_tokens: 512, top_p: 0.95` and a **20 s abort timeout** (a hung model call can't block the function until its 30 s cap). Non-OK response → `null` (fallback kicks in).
-6. **Defensive JSON parsing** (the most instructive part of the file — LLMs are unreliable!):
-   - Try `JSON.parse(rawText)` directly.
-   - Else scan for embedded `{…}` blobs and parse each until one has `response_text`.
-   - Else regex out just the `"response_text"` value.
-   - Else treat the raw text as the reply, but flag it as "junk" (too short / punctuation-only / containing JSON keys) → `should_reply: false`.
-7. **Sanitize** `response_text`: strip any leaked JSON fragments or code fences and collapse excess newlines.
+   The system prompt is the personality (1940s British English, no AI disclaimers, 1–3 sentences, boundaries against encouraging harm) **plus an output contract**:
+   ```
+   ---REPLY---
+   Your in-character reply here (1-3 sentences of plain prose).
+   ---MEMORIES---
+   [{"category": "Identity|Secret|Fear|Desire|Relationship|Fact", "key": "…", "value": "…", "importance": 1-5}]
+   ```
+   Plain prose between markers replaced an earlier "reply as JSON" contract — JSON formatting tends to drag models out of character, and prose streams character-by-character far more naturally.
+5. **Streaming**: `fetch` with `stream: true`, `temperature: 0.9, max_tokens: 512, top_p: 0.95`, reading the SSE body manually (`data:` lines → `choices[0].delta.content`).
+6. **Forward only the reply section.** `flushDisplay()` tracks `emittedUpTo` and, once `---REPLY---` has appeared, calls `onDelta` with the text up to `---MEMORIES---` (or the current end). Because it uses an absolute offset into `raw`, a chunk that *extends* the reply emits only the new part — no duplication, and the memories JSON is never shown.
+7. **Defensive parsing** (the most instructive part of the file — LLMs are unreliable!):
+   - `parseModelOutput(raw)` slices the reply between the markers; if the markers are missing entirely it falls back to `parseLegacyReply()`, which hunts for raw JSON (`{…}` blobs with a `response_text` key, then a bare `"response_text"` regex).
+   - `stripFences()` removes markdown code fences; whitespace is collapsed to at most a blank-line break.
+   - Junk detection: a reply under 2 characters, punctuation-only, or containing JSON keys → `should_reply: false, response_text: null` (the diary stays silent rather than printing garbage).
+   - Memories: take the substring from the marker, find the outermost `[...]`, `JSON.parse`, then keep only entries with `key` + `value`, defaulting the category to `Fact` and clamping importance to 1–5.
 8. **Persist**: upsert each extracted memory, save both conversation turns, insert the entry (all in parallel); on DB failure just log — the user still gets their reply.
+
+#### Model selection (why there is a chain)
+
+Free-tier model IDs on NIM **retire without warning**, and a retired model is not always removed from `GET /v1/models` — so a catalog listing is not proof of service. This project has already outlived two retirements, and `nvidia/llama3-chatqa-1.5-70b` answers a real request with 404 despite being listed. So:
+
+- `MODEL_CHAIN` is tried in order; the first model that produces anything wins.
+- All attempts share a **24 s wall-clock budget** (`MODEL_CHAIN_BUDGET_MS`) to stay inside the function's 30 s `maxDuration`. The primary gets ~60% of the remaining budget, each later model an equal share of what's left, and the loop stops when under 3 s remains — a stalled primary can't starve its own fallbacks.
+- A retry happens **only when an attempt produced nothing**. A mid-stream failure returns whatever already arrived, so the writer never sees two replies spliced together.
+- `scripts/list-models.mjs` lists what the account can see. When picking a model, four properties matter (all verified live before switching):
+  1. it answers an actual completion with 200;
+  2. it streams **many small chunks** — some models buffer the entire answer and emit one chunk, which defeats the progressive reveal;
+  3. it writes **no reasoning preamble** ("Here's a thinking process: …") into the content — several newer nemotron models do, ruining the voice;
+  4. it honours the `---REPLY---` / `---MEMORIES---` contract.
+- Empirical note from measuring candidates: `mistralai/mistral-nemotron` and `google/gemma-4-31b-it` were fully compliant (3/3 marker checks, 0.2–2.2 s to first token, 20–108 chunks), while `nvidia/llama-3.1-nemotron-70b-instruct` and `nvidia/llama3-chatqa-1.5-70b` are dead. Free-tier latency is also variable — the same prompt measured 3.5 s once and 15.6 s another time, which is exactly why the delivery guarantee in §7.4 matters.
+
+> 💡 Learning point: **never depend on a single third-party model ID.** Pin your *contract* (markers, persona, budget), not the vendor's catalogue, and make "no answer" a normal, tested code path.
 
 ### 7.4 The offline fallback
 
@@ -346,15 +408,19 @@ A four-module mini-engine that emulates a character with *no AI at all*:
 
 **`responses.js`** — the content: every theme × every tier has 5–8 hand-written 1940s-voice responses (~250 total), plus `SILENT_RESPONSES` for very short/empty-feeling messages.
 
-**Orchestration in `diary.js`**:
+**Orchestration in `diary.js`** — `streamDiaryInteraction()` writes NDJSON to `res` and guarantees a reply reaches the client:
 
 ```js
-export async function interactWithDiary(userMessage, personaName, username) {
-  const ai = await interactWithNemotron(...);   // primary
-  if (ai) return ai;
-  return fallbackResponse(...);                 // graceful degradation
+let result = await interactWithNemotronStream(...);   // primary (streams via onDelta)
+if (!result) {
+  result = await fallbackResponse(...);               // graceful degradation (one chunk)
+} else if (!streamed && result.response_text) {
+  writeNdjson(res, { t: 'chunk', v: result.response_text });  // model skipped the markers
 }
+writeNdjson(res, { t: 'done', should_reply, response_text, extracted_memories });
 ```
+
+The `else if` is subtle but important: if a model returns prose **without** the `---REPLY---` marker, nothing could be forwarded live, so the reply is delivered as a single chunk instead of being dropped (the writer would otherwise see the "ink sinks quietly" placeholder for a reply that really exists).
 
 `fallbackResponse` mirrors the AI path: save User Name, run `detectThemes`, upsert extracted memories, pick a "silent" response for very short generic messages, else pick from the themed pool — and persist everything exactly like the AI path does.
 
@@ -413,13 +479,17 @@ Memory categories and their meaning:
 
 4. **Shared `_lib` between two HTTP layers.** Instead of duplicating logic, both `server-dev.js` and the Vercel functions import the same modules. Cheap parity between dev and prod; a framework (e.g. Express, or Vercel's own dev runtime) would remove even the thin wrapper duplication.
 
-5. **The LLM is asked to return JSON — and is not trusted.** `nemotron.js` has a four-stage parse-and-repair pipeline. Any beginner working with LLMs should internalize this: **the model's output is untrusted input**; validate, sanitize, and always have a non-AI path.
+5. **The model's output is untrusted input.** Even after switching from "reply as JSON" to plain prose between markers, `nemotron.js` keeps a multi-stage parse-and-repair pipeline (marker slice → legacy JSON hunt → junk detection → sanitization). Any beginner working with LLMs should internalize this: validate, sanitize, and always have a non-AI path.
 
-6. **All UX timing is choreographed.** 1.8 s ink dissolve → API call → minimum 800 ms skeleton floor → 45 ms/char reveal. The minimum-duration pattern (`Math.max(0, 800 − elapsed)`) prevents a fast API from making the loading state flicker, a nice real-world UX trick.
+6. **Stream what you can, but guarantee delivery.** The reply is forwarded to the browser chunk by chunk — yet the `done` event also carries the full `response_text`. That redundancy is deliberate: models sometimes ignore the marker contract, and a stalled stream must never cost the writer their reply. The client treats "no chunks arrived" as a normal case (it reveals the final text in one go), which also covers non-streaming backends.
 
-7. **Procedural audio, no assets.** Synthesizing noise + oscillator sweeps means zero bytes of audio downloaded, infinite variation (random filter frequencies per play), and a great excuse to learn the Web Audio API graph (source → filter → gain → destination).
+7. **Choreographed, not instant.** 1.8 s ink dissolve → API call → minimum 800 ms skeleton floor → 45 ms/char reveal. The minimum-duration pattern (`Math.max(0, 800 − elapsed)`) prevents a fast API from making the loading state flicker. The character reveal *chasing* a growing string (a ref + one interval, rather than restarting per chunk) is the pattern that makes streaming feel like handwriting instead of typing.
 
-8. **Vanilla CSS over a framework.** The bespoke aesthetic (leather grain gradients, embossed text, parchment stains, ink-glow keyframes) would fight utility-class frameworks. One well-organized CSS file with custom properties is perfectly maintainable at this scale.
+8. **Personalization is made visible.** Extracting memories is invisible by default, so the app surfaces it three ways: a "the diary learned N new things about you" toast after an interaction, a browsable memory bank (the Brain button), and a greeting on the cover. Users can edit or delete any memory — transparency plus user control is what makes an ambient-memory feature feel like a feature rather than a black box.
+
+9. **Procedural audio, no assets.** Synthesizing noise + oscillator sweeps means zero bytes of audio downloaded, infinite variation (random filter frequencies per play), and a great excuse to learn the Web Audio API graph (source → filter → gain → destination).
+
+10. **Vanilla CSS over a framework.** The bespoke aesthetic (leather grain gradients, embossed text, parchment stains, ink-glow keyframes) would fight utility-class frameworks. One well-organized CSS file with custom properties is perfectly maintainable at this scale.
 
 ---
 

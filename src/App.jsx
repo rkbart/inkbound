@@ -116,23 +116,109 @@ export default function App() {
     }
   };
 
+  // Optimistic per-memory operations — the UI updates instantly, then the
+  // list is re-fetched so it always settles to the server's truth.
+  const handleDeleteMemory = async (id) => {
+    setMemories(prev => prev.filter(m => m.id !== id));
+    try {
+      await fetchWithTimeout(`${API_BASE}/memories`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, username: currentUsername })
+      });
+    } catch (err) {
+      console.warn('Delete memory failed:', err);
+    }
+    fetchMemories();
+  };
+
+  const handleUpdateMemory = async (id, value) => {
+    setMemories(prev => prev.map(m => (m.id === id ? { ...m, value } : m)));
+    try {
+      await fetchWithTimeout(`${API_BASE}/memories`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, username: currentUsername, value })
+      });
+    } catch (err) {
+      console.warn('Update memory failed:', err);
+    }
+    fetchMemories();
+  };
+
+  const handleDeleteEntry = async (id) => {
+    setEntries(prev => prev.filter(e => e.id !== id));
+    try {
+      await fetchWithTimeout(`${API_BASE}/entries`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, username: currentUsername })
+      });
+    } catch (err) {
+      console.warn('Delete entry failed:', err);
+    }
+    fetchEntries();
+  };
+
   const handleOpenBook = () => {
     setIsOpen(true);
     diaryAudio.playPageFlip();
     diaryAudio.startAmbient();
   };
 
-  const handleInteract = async (userContent) => {
+  // Reads the NDJSON stream produced by /api/interact:
+  //   {"t":"chunk","v":"..."}  reply text deltas, in order
+  //   {"t":"done", ...}        final payload, returned as the result
+  // Falls back to plain-JSON parsing for servers that do not stream.
+  const readInteractionStream = async (res, onChunk) => {
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('ndjson') || !res.body) {
+      return res.json();
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let final = null;
+
+    const handleLine = (line) => {
+      if (!line) return;
+      try {
+        const evt = JSON.parse(line);
+        if (evt.t === 'chunk' && typeof evt.v === 'string') {
+          onChunk(evt.v);
+        } else if (evt.t === 'done') {
+          final = evt;
+        }
+      } catch { /* ignore malformed line */ }
+    };
+
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = buffer.indexOf('\n')) !== -1) {
+        handleLine(buffer.slice(0, nl).trim());
+        buffer = buffer.slice(nl + 1);
+      }
+    }
+    if (buffer.trim()) handleLine(buffer.trim());
+
+    return final || { should_reply: true, response_text: '', extracted_memories: [] };
+  };
+
+  const handleInteract = async (userContent, onChunk = () => {}) => {
     setIsLoading(true);
     try {
       const res = await fetchWithTimeout(`${API_BASE}/interact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: userContent, personaName, username: currentUsername })
-      });
+      }, 40000);
 
       if (res.ok) {
-        const data = await res.json();
+        const data = await readInteractionStream(res, onChunk);
         fetchEntries();
         fetchMemories();
         setIsLoading(false);
@@ -146,7 +232,7 @@ export default function App() {
     const fallbackReply = `I hear your words. The ink fades, but the memory remains. What else do you wish to reveal to me?`;
     const localEntry = { id: Date.now(), content: userContent, response: fallbackReply };
     setEntries(prev => [...prev, localEntry]);
-    return { should_reply: true, response_text: fallbackReply };
+    return { should_reply: true, response_text: fallbackReply, extracted_memories: [] };
   };
 
   if (!user) {
@@ -161,7 +247,12 @@ export default function App() {
         ) : (
           <ParchmentSpread
             entries={entries}
+            memories={memories}
+            username={currentUsername}
             onInteract={handleInteract}
+            onDeleteEntry={handleDeleteEntry}
+            onDeleteMemory={handleDeleteMemory}
+            onUpdateMemory={handleUpdateMemory}
             personaName={personaName}
             isLoading={isLoading}
             showSettings={showSettings}
