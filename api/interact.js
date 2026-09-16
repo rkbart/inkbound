@@ -1,4 +1,4 @@
-import { interactWithDiary } from './_lib/diary.js';
+import { interactWithDiary, MAX_CONTENT_LENGTH } from './_lib/diary.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -9,6 +9,10 @@ export default async function handler(req, res) {
 
   if (!content || typeof content !== 'string' || !content.trim()) {
     return res.status(400).json({ error: 'Content is required' });
+  }
+
+  if (content.length > MAX_CONTENT_LENGTH) {
+    return res.status(400).json({ error: `Content exceeds ${MAX_CONTENT_LENGTH} characters` });
   }
 
   try {

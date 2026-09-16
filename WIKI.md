@@ -293,10 +293,10 @@ The handlers themselves are deliberately dumb: validate input → call one `_lib
 
 | Endpoint | Method | Body / Query | Returns |
 |---|---|---|---|
-| `/api/interact` | POST | `{ content, personaName?, username? }` | `{ should_reply, response_text, extracted_memories[] }` |
+| `/api/interact` | POST | `{ content, personaName?, username? }` — content capped at 4000 chars (over → 400) | `{ should_reply, response_text, extracted_memories[] }` |
 | `/api/entries` | GET | `?username=` | `[{ id, username, content, response, mood, created_at }]` (oldest first) |
 | `/api/memories` | GET | `?username=` | `[{ id, category, key, value, importance, last_seen }]` (importance desc) |
-| `/api/reset` | POST | `{ username }` (optional) | `{ success: true, message }` — with a username, clears that user's entries/conversation and all non-Persona/Origin memories; without, wipes everything |
+| `/api/reset` | POST | `{ username }` (**required** — no username → 400) | `{ success: true, message }` — clears that user's entries/conversation and all non-Persona memories. A blanket wipe is impossible. |
 
 ### 7.3 The AI brain: `nemotron.js`
 
@@ -315,7 +315,7 @@ The handlers themselves are deliberately dumb: validate input → call one `_lib
    [user]    the new entry
    ```
    The system prompt is the personality: 1940s British English, no AI disclaimers, 1–3 sentences, **and a strict output contract**: respond as JSON `{ should_reply, response_text, extracted_memories[] }` where each memory has `category / key / value / importance`.
-5. `fetch` with `temperature: 0.9, max_tokens: 512, top_p: 0.95`. Non-OK response → `null` (fallback kicks in).
+5. `fetch` with `temperature: 0.9, max_tokens: 512, top_p: 0.95` and a **20 s abort timeout** (a hung model call can't block the function until its 30 s cap). Non-OK response → `null` (fallback kicks in).
 6. **Defensive JSON parsing** (the most instructive part of the file — LLMs are unreliable!):
    - Try `JSON.parse(rawText)` directly.
    - Else scan for embedded `{…}` blobs and parse each until one has `response_text`.
@@ -366,7 +366,7 @@ A small hand-rolled service object. Patterns worth copying:
 - **Retry-on-stale-connection** — `execute()` catches any error, resets the cached connection, and retries once. This works around Turso's HTTP connections going stale on warm serverless instances.
 - **Array→object rows** — Turso returns `[value, value]` rows plus a `columns` array; `toObjects()` zips them into named objects.
 
-Methods: `addEntry`, `getEntries`, `upsertMemory` (manual check-then-update/insert keyed on `username + key`), `getMemories`, `addMessage`, `getRecentHistory` (latest N, re-reversed to chronological order), `clearUserData` (keeps `Persona`/`Origin` memories), `clearAllData` (and re-seeds the Owner memory).
+Methods: `addEntry`, `getEntries`, `upsertMemory` (a single atomic `INSERT ... ON CONFLICT` keyed on the unique `(username, key)` index — replaces the old race-prone check-then-insert), `getMemories`, `addMessage`, `getRecentHistory` (latest N, re-reversed to chronological order), and `clearUserData` (keeps `Persona` memories). There is deliberately no "wipe everything" method — the reset endpoint requires a username.
 
 ---
 
@@ -386,6 +386,8 @@ memories      -- the diary's "knowledge" about each user
 conversation  -- raw chat log for LLM context (and fallback tier counting)
   id, username, role ('user'|'assistant'), content, created_at
 ```
+
+Indexes (applied by `scripts/setup-db.js`, idempotent): a **unique** index on `memories(username, key)` — it enables the atomic upsert in `db.js` and makes duplicate memories impossible even under concurrent requests — plus lookup indexes on `entries(username, created_at)` and `conversation(username, id)` for fast per-user queries. The setup script first deduplicates any pre-existing duplicate memory rows (keeping the lowest `id`).
 
 Memory categories and their meaning:
 
@@ -451,7 +453,7 @@ Great next steps if you're learning by doing:
 2. **Tests** — `themes.js`, `brancher.js`, and `picker.js` are pure functions; they're ideal Vitest candidates (Vitest integrates natively with Vite).
 3. **Streaming replies** — use the LLM's streaming mode and reveal characters as tokens arrive instead of after the full response.
 4. **Sentiment → mood** — the `entries.mood` column exists but is always `'neutral'`. Have the LLM (or the themes engine) fill it and tint the ledger.
-5. **Fix known rough edges** — `App.jsx` references `currentUsername` before its declaration in some code paths (works at call time, but fragile); `MemoryModal` uses inline styles while everything else uses `index.css`.
+5. **Fix known rough edges** — ✅ `currentUsername` hoisting in `App.jsx` (now declared with the other state); `MemoryModal` still uses inline styles while everything else uses `index.css`, and remains unwired (the Phase 2 memory-bank UI will address it).
 6. **Server-side pagination/search** — SQL `LIMIT/OFFSET` instead of slicing all entries in the browser.
 7. **TypeScript** — the API payloads (`should_reply`, `response_text`, `extracted_memories`) are a perfect case for shared types between frontend and backend.
 

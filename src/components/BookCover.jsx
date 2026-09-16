@@ -1,7 +1,7 @@
 import React from 'react';
 import { Sparkles } from 'lucide-react';
 
-export default function BookCover({ onOpen }) {
+export default function BookCover({ onOpen, username }) {
   return (
     <div className="book-cover-closed" onClick={onOpen}>
       <div className="leather-texture" />
@@ -42,7 +42,7 @@ export default function BookCover({ onOpen }) {
         letterSpacing: '1px',
         textAlign: 'center'
       }}>
-        Click cover to open
+        {username ? `Welcome back, ${username}` : 'Click cover to open'}
       </p>
     </div>
   );

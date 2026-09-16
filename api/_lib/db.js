@@ -51,22 +51,19 @@ export const dbService = {
   },
 
   async upsertMemory(category, key, value, username, importance = 3) {
-    const existing = await execute(
-      'SELECT id FROM memories WHERE username = ? AND key = ?',
-      [username, key]
+    // Atomic upsert — requires the unique index on memories(username, key)
+    // (see schema.sql: idx_memories_username_key). Replaces the old
+    // check-then-insert pattern, which could race into duplicate rows.
+    await execute(
+      `INSERT INTO memories (username, category, key, value, importance)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(username, key) DO UPDATE SET
+         value = excluded.value,
+         category = excluded.category,
+         importance = excluded.importance,
+         last_seen = CURRENT_TIMESTAMP`,
+      [username, category, key, value, importance]
     );
-
-    if (existing.rows.length > 0) {
-      await execute(
-        'UPDATE memories SET value = ?, category = ?, importance = ?, last_seen = CURRENT_TIMESTAMP WHERE id = ?',
-        [value, category, importance, existing.rows[0][0]]
-      );
-    } else {
-      await execute(
-        'INSERT INTO memories (username, category, key, value, importance) VALUES (?, ?, ?, ?, ?)',
-        [username, category, key, value, importance]
-      );
-    }
   },
 
   async getMemories(username) {
@@ -97,22 +94,14 @@ export const dbService = {
       'DELETE FROM entries WHERE username = ?',
       [username]
     );
+    // 'Persona' rows are system-owned metadata and survive a reset.
     await execute(
-      "DELETE FROM memories WHERE username = ? AND category NOT IN ('Persona', 'Origin')",
+      "DELETE FROM memories WHERE username = ? AND category != 'Persona'",
       [username]
     );
     await execute(
       'DELETE FROM conversation WHERE username = ?',
       [username]
-    );
-  },
-
-  async clearAllData() {
-    await execute('DELETE FROM entries');
-    await execute('DELETE FROM memories');
-    await execute('DELETE FROM conversation');
-    await execute(
-      "INSERT INTO memories (username, category, key, value, importance) VALUES ('anonymous', 'Persona', 'Owner', 'Enchanted Diary Memory', 5)"
     );
   }
 };

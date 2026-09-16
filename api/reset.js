@@ -7,12 +7,14 @@ export default async function handler(req, res) {
 
   const { username } = req.body;
 
+  // Safety: a blanket wipe is never allowed. A username is required so a
+  // single unauthenticated request can only ever clear that user's data.
+  if (!username || typeof username !== 'string' || !username.trim()) {
+    return res.status(400).json({ error: 'username is required' });
+  }
+
   try {
-    if (username) {
-      await dbService.clearUserData(username);
-    } else {
-      await dbService.clearAllData();
-    }
+    await dbService.clearUserData(username.trim());
     return res.status(200).json({ success: true, message: 'Diary memory cleared' });
   } catch (err) {
     console.error('Reset error:', err);

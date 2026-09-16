@@ -28,3 +28,17 @@ CREATE TABLE IF NOT EXISTS conversation (
 INSERT INTO memories (username, category, key, value, importance)
 SELECT 'anonymous', 'Persona', 'Owner', 'Enchanted Diary Memory', 5
 WHERE NOT EXISTS (SELECT 1 FROM memories WHERE key = 'Owner' AND category = 'Persona');
+
+-- ---------------------------------------------------------------
+-- Deduplicate memories (keep lowest id per username+key) before
+-- applying the unique index below. Idempotent: only removes rows
+-- that would violate the index.
+-- ---------------------------------------------------------------
+DELETE FROM memories WHERE id NOT IN
+  (SELECT MIN(id) FROM memories GROUP BY username, key);
+
+-- Integrity + performance indexes. The unique index lets
+-- db.upsertMemory() use a single atomic INSERT ... ON CONFLICT.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_username_key ON memories(username, key);
+CREATE INDEX IF NOT EXISTS idx_entries_username_created ON entries(username, created_at);
+CREATE INDEX IF NOT EXISTS idx_conversation_username_id ON conversation(username, id);

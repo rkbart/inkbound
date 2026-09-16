@@ -404,6 +404,25 @@ body {
   to { opacity: 1; }
 }
 
+/* ----------------------------------------------------
+   SELECTION & GESTURE SAFETY
+   - Reading areas allow text selection (the global
+     `user-select: none` protects the double-tap gesture).
+   - `touch-action: manipulation` stops iOS Safari's
+     double-tap zoom from fighting the double-tap-to-submit
+     gesture on the writing/response surfaces.
+   ---------------------------------------------------- */
+.ink-textarea,
+.history-user-text,
+.history-riddle-text {
+  user-select: text;
+}
+
+.ink-textarea,
+.full-page-riddle-container {
+  touch-action: manipulation;
+}
+
 .riddle-full-text-area {
   flex: 1;
   font-family: var(--font-ink);

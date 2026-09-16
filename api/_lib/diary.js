@@ -4,6 +4,10 @@ import { dbService } from './db.js';
 import { selectResponsePool } from './brancher.js';
 import { pickResponse, pickSilentResponse } from './picker.js';
 
+// Maximum characters accepted for a single diary entry. Enforced by the
+// Vercel handler, the local dev server, and the frontend textarea.
+export const MAX_CONTENT_LENGTH = 4000;
+
 export async function interactWithDiary(userMessage, personaName = 'Tom Riddle', username = 'anonymous') {
   console.log('diary: calling nemotron');
   const nemotronResult = await interactWithNemotron(userMessage, personaName, username);

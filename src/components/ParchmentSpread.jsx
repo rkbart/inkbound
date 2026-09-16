@@ -242,6 +242,7 @@ export default function ParchmentSpread({
               ref={textareaRef}
               className={`ink-textarea ${isSinking ? 'ink-sinking' : 'ink-typing'}`}
               placeholder="Write down your thoughts, secrets, or questions for the diary..."
+              maxLength={4000}
               value={inputText}
               onChange={handleTextChange}
               onKeyDown={handleKeyDown}

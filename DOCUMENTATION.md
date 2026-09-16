@@ -335,7 +335,7 @@ function toObjects(result) {
 **Request:**
 ```json
 {
-  "username": "someuser"  // optional, clears all if omitted
+  "username": "someuser"  // required — requests without it return 400
 }
 ```
 
@@ -381,6 +381,8 @@ CREATE TABLE IF NOT EXISTS conversation (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
+
+**Indexes** (applied by `scripts/setup-db.js`): unique index on `memories(username, key)` (enables the atomic upsert in `db.js`, prevents duplicate memories), plus `entries(username, created_at)` and `conversation(username, id)` for fast per-user queries.
 
 ### Memory Categories
 

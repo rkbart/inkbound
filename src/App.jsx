@@ -6,6 +6,15 @@ import { diaryAudio } from './utils/audio';
 
 const API_BASE = '/api';
 
+// Fetch helper with a hard timeout so a hung request can never leave the UI
+// stuck in a loading state. Falls back to plain fetch on older browsers.
+const fetchWithTimeout = (url, opts = {}, ms = 25000) => {
+  if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+    return fetch(url, { ...opts, signal: AbortSignal.timeout(ms) });
+  }
+  return fetch(url, opts);
+};
+
 export default function App() {
   const [isOpen, setIsOpen] = useState(false);
   const [entries, setEntries] = useState([]);
@@ -14,6 +23,11 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [user, setUser] = useState(null);
   const [personaName, setPersonaName] = useState('Tom');
+
+  // Declared here so the handlers below reference it in source order
+  // (it was previously declared after them, which worked only because
+  // handlers run post-render).
+  const currentUsername = user ? user.username : 'anonymous';
 
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem('inkbound_user') || 'null');
@@ -61,7 +75,7 @@ export default function App() {
 
   const handleClearMemory = async () => {
     try {
-      await fetch(`${API_BASE}/reset`, {
+      await fetchWithTimeout(`${API_BASE}/reset`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: currentUsername })
@@ -78,11 +92,9 @@ export default function App() {
     }
   };
 
-  const currentUsername = user ? user.username : 'anonymous';
-
   const fetchEntries = async () => {
     try {
-      const res = await fetch(`${API_BASE}/entries?username=${encodeURIComponent(currentUsername)}`);
+      const res = await fetchWithTimeout(`${API_BASE}/entries?username=${encodeURIComponent(currentUsername)}`);
       if (res.ok) {
         const data = await res.json();
         setEntries(data);
@@ -94,7 +106,7 @@ export default function App() {
 
   const fetchMemories = async () => {
     try {
-      const res = await fetch(`${API_BASE}/memories?username=${encodeURIComponent(currentUsername)}`);
+      const res = await fetchWithTimeout(`${API_BASE}/memories?username=${encodeURIComponent(currentUsername)}`);
       if (res.ok) {
         const data = await res.json();
         setMemories(data);
@@ -113,7 +125,7 @@ export default function App() {
   const handleInteract = async (userContent) => {
     setIsLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/interact`, {
+      const res = await fetchWithTimeout(`${API_BASE}/interact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: userContent, personaName, username: currentUsername })
@@ -145,7 +157,7 @@ export default function App() {
     <div className="book-wrapper">
       <div className="book-container">
         {!isOpen ? (
-          <BookCover onOpen={handleOpenBook} />
+          <BookCover onOpen={handleOpenBook} username={user?.username} />
         ) : (
           <ParchmentSpread
             entries={entries}

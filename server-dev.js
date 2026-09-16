@@ -53,9 +53,14 @@ const server = http.createServer(async (req, res) => {
 
   try {
     if (path === '/api/interact' && req.method === 'POST') {
-      const { interactWithDiary } = await import('./api/_lib/diary.js');
+      const { interactWithDiary, MAX_CONTENT_LENGTH } = await import('./api/_lib/diary.js');
       const body = await parseBody(req);
-      if (!body.content) { res.writeHead(400); res.end(JSON.stringify({ error: 'Content required' })); return; }
+      if (!body.content || typeof body.content !== 'string' || !body.content.trim()) {
+        res.writeHead(400); res.end(JSON.stringify({ error: 'Content required' })); return;
+      }
+      if (body.content.length > MAX_CONTENT_LENGTH) {
+        res.writeHead(400); res.end(JSON.stringify({ error: `Content exceeds ${MAX_CONTENT_LENGTH} characters` })); return;
+      }
       const result = await interactWithDiary(body.content.trim(), body.personaName || 'Tom Riddle', body.username || 'anonymous');
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
@@ -74,11 +79,13 @@ const server = http.createServer(async (req, res) => {
     } else if (path === '/api/reset' && req.method === 'POST') {
       const { dbService } = await import('./api/_lib/db.js');
       const body = await parseBody(req);
-      if (body.username) {
-        await dbService.clearUserData(body.username);
-      } else {
-        await dbService.clearAllData();
+      // Safety: a blanket wipe is never allowed — a username is required.
+      if (!body.username || typeof body.username !== 'string' || !body.username.trim()) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'username is required' }));
+        return;
       }
+      await dbService.clearUserData(body.username.trim());
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: true, message: 'Diary memory cleared' }));
     } else {

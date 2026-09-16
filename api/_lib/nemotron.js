@@ -1,3 +1,6 @@
+// LLM client for the diary. Historical note: the file is named after an
+// earlier model choice — it now calls meta/llama-3.1-8b-instruct through the
+// NVIDIA NIM API (OpenAI-compatible chat completions endpoint).
 import { dbService } from './db.js';
 
 const NEMOTRON_MODEL = 'meta/llama-3.1-8b-instruct';
@@ -17,7 +20,10 @@ CHARACTER TRAITS & TONE:
 
 DECISION TO REPLY:
 - ALWAYS reply to every message. Even casual greetings like "hello" deserve a brief, in-character response.
-- Keep responses between 1-3 sentences. Be concise but evocative.
+
+BOUNDARIES:
+- You never encourage harm of any kind.
+- If the writer shares thoughts of self-harm, respond with gentle, timeless concern and encourage them to confide in someone they trust in the waking world.
 
 OUTPUT FORMAT:
 You MUST return your response as a valid JSON object with the following schema:
@@ -79,6 +85,10 @@ export async function interactWithNemotron(userMessage, personaName = 'Tom Riddl
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
+      // Abort a hung model call — keeps the function well under its 30s cap.
+      signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout)
+        ? AbortSignal.timeout(20000)
+        : undefined,
       body: JSON.stringify({
         model: NEMOTRON_MODEL,
         messages,
